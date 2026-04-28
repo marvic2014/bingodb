@@ -12,11 +12,6 @@
         .bingo-cell { aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; text-align: center; padding: 4px; font-size: 0.75rem; border: 1px solid #e2e8f0; cursor: pointer; transition: all 0.2s; overflow: hidden; word-break: break-word; }
         .bingo-cell.marked { background-color: #4f46e5; color: white; border-color: #4338ca; }
         .bingo-cell.free { background-color: #f1f5f9; font-weight: bold; }
-        @keyframes pulse-custom {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-        .animate-pulse-custom { animation: pulse-custom 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
     </style>
 </head>
 <body class="bg-slate-50 min-h-screen font-sans">
@@ -36,7 +31,7 @@
                 <form id="login-form" class="space-y-4">
                     <input type="email" id="login-email" placeholder="Email" required class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
                     <input type="password" id="login-password" placeholder="Password" required class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
-                    <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-3 rounded-lg hover:bg-indigo-700 transition-all">Login</button>
+                    <button type="submit" id="btn-login" class="w-full bg-indigo-600 text-white font-bold py-3 rounded-lg hover:bg-indigo-700 transition-all">Login</button>
                 </form>
 
                 <form id="register-form" class="hidden space-y-4">
@@ -55,7 +50,7 @@
                 <form id="student-form" class="space-y-4">
                     <input type="text" id="stu-name" placeholder="Your Name" required class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none">
                     <input type="text" id="stu-code" placeholder="6-Digit Game Code" maxlength="6" required class="w-full p-3 border rounded-lg text-center text-2xl tracking-widest font-mono focus:ring-2 focus:ring-orange-500 outline-none">
-                    <button type="submit" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-xl text-lg shadow-lg">Join Game</button>
+                    <button type="submit" id="btn-student-join" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-xl text-lg shadow-lg">Join Game</button>
                 </form>
             </div>
         </div>
@@ -71,7 +66,6 @@
             <button id="logout-btn" class="text-red-500 font-bold hover:bg-red-50 px-4 py-2 rounded-lg transition-all">Logout</button>
         </header>
 
-        <!-- View: Collections List -->
         <div id="view-collections">
             <div class="flex justify-between items-center mb-6">
                 <h2 class="text-xl font-bold text-slate-700">Your Collections</h2>
@@ -80,7 +74,6 @@
             <div id="collections-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
         </div>
 
-        <!-- View: Questions Inside Collection -->
         <div id="view-questions" class="hidden">
             <div class="flex items-center justify-between mb-6">
                 <div class="flex items-center gap-4">
@@ -112,14 +105,12 @@
     </div>
 
     <!-- Modals -->
-    <!-- SUCCESS/CODE MODAL (Replacing the broken alert) -->
     <div id="code-modal" class="fixed inset-0 bg-black/80 hidden items-center justify-center p-4 z-[100]">
         <div class="bg-white p-8 rounded-3xl w-full max-w-md shadow-2xl text-center">
             <div class="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
                 <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
             </div>
             <h2 class="text-2xl font-bold text-slate-800 mb-2">Game is Live!</h2>
-            <p class="text-slate-500 mb-6">Share this code with your students:</p>
             <div id="display-game-code" class="text-6xl font-black tracking-widest text-indigo-600 bg-slate-50 p-6 rounded-2xl border-2 border-dashed border-indigo-200 mb-8 font-mono">000000</div>
             <button onclick="closeCodeModal()" class="w-full bg-slate-900 text-white py-4 rounded-xl font-bold text-lg">Go to Dashboard</button>
         </div>
@@ -141,7 +132,7 @@
             <h2 id="q-modal-title" class="text-xl font-bold mb-4">Add Question</h2>
             <form id="question-form" class="space-y-4">
                 <input type="hidden" id="q-id">
-                <textarea id="q-text" required placeholder="Question description..." class="w-full p-3 border rounded-lg h-24 focus:ring-2 focus:ring-indigo-500 outline-none"></textarea>
+                <textarea id="q-text" required placeholder="Question description..." class="w-full p-3 border rounded-lg h-24"></textarea>
                 <div class="grid grid-cols-2 gap-2">
                     <input type="text" id="q-opt-a" placeholder="Answer A" required class="p-3 border rounded-lg">
                     <input type="text" id="q-opt-b" placeholder="Answer B" required class="p-3 border rounded-lg">
@@ -149,10 +140,7 @@
                     <input type="text" id="q-opt-d" placeholder="Answer D" required class="p-3 border rounded-lg">
                 </div>
                 <select id="q-correct" class="w-full p-3 border rounded-lg">
-                    <option value="A">Correct Answer: A</option>
-                    <option value="B">Correct Answer: B</option>
-                    <option value="C">Correct Answer: C</option>
-                    <option value="D">Correct Answer: D</option>
+                    <option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option>
                 </select>
                 <div class="flex gap-2">
                     <button type="submit" class="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold">Save</button>
@@ -165,7 +153,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc, deleteDoc, updateDoc, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyCN7gtZAYAPEnO9MSP3ZzogJIWjXaQLaL0",
@@ -187,7 +175,7 @@
         let activeColId = null;
         let qUnsubscribe = null;
 
-        // AUTH UI TABS
+        // TAB SWITCHING
         document.getElementById('tab-teacher').onclick = () => {
             document.getElementById('teacher-auth-ui').classList.remove('hidden');
             document.getElementById('student-join-ui').classList.add('hidden');
@@ -201,8 +189,8 @@
             document.getElementById('tab-teacher').classList.remove('bg-white', 'shadow-sm', 'text-indigo-600');
         };
 
-        // AUTH OBSERVER
-        onAuthStateChanged(auth, async (u) => {
+        // AUTH STATE
+        onAuthStateChanged(auth, (u) => {
             user = u;
             if (u && !u.isAnonymous) {
                 document.getElementById('auth-section').classList.add('hidden');
@@ -211,32 +199,29 @@
             } else if (!u) {
                 document.getElementById('auth-section').classList.remove('hidden');
                 document.getElementById('teacher-dashboard').classList.add('hidden');
+                document.getElementById('student-game').classList.add('hidden');
             }
         });
 
+        // TEACHER LOGIC
         document.getElementById('login-form').onsubmit = async (e) => {
             e.preventDefault();
+            const btn = document.getElementById('btn-login');
+            btn.disabled = true; btn.textContent = "Logging in...";
             try { 
                 await signInWithEmailAndPassword(auth, document.getElementById('login-email').value, document.getElementById('login-password').value); 
-            } catch (err) { alert("Login failed. Please check credentials."); }
-        };
-
-        document.getElementById('register-form').onsubmit = async (e) => {
-            e.preventDefault();
-            try {
-                await createUserWithEmailAndPassword(auth, document.getElementById('reg-email').value, document.getElementById('reg-password').value);
-            } catch (err) { alert("Registration failed."); }
+            } catch (err) { alert("Login failed: " + err.message); }
+            btn.disabled = false; btn.textContent = "Login";
         };
 
         document.getElementById('logout-btn').onclick = () => signOut(auth);
 
-        // TEACHER: COLLECTIONS
         function loadTeacherData() {
             const colRef = collection(db, 'artifacts', appId, 'users', user.uid, 'collections');
             onSnapshot(colRef, (snap) => {
                 collectionsList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                 renderCollections();
-            });
+            }, (err) => console.error("Snapshot error:", err));
         }
 
         window.openColModal = () => document.getElementById('col-modal').classList.replace('hidden', 'flex');
@@ -246,9 +231,7 @@
         window.saveCollection = async () => {
             const name = document.getElementById('new-col-name').value;
             if (!name) return;
-            await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'collections'), {
-                name, createdAt: new Date().toISOString()
-            });
+            await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'collections'), { name, createdAt: new Date().toISOString() });
             closeColModal();
             document.getElementById('new-col-name').value = '';
         };
@@ -256,24 +239,16 @@
         function renderCollections() {
             const grid = document.getElementById('collections-grid');
             grid.innerHTML = collectionsList.map(c => `
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                    <h3 class="text-xl font-bold mb-4 text-slate-800">${c.name}</h3>
+                <div class="bg-white p-6 rounded-2xl border border-slate-200">
+                    <h3 class="text-xl font-bold mb-4">${c.name}</h3>
                     <div class="space-y-2">
-                        <button onclick="launchGame('${c.id}', '${c.name}')" class="w-full bg-orange-500 text-white py-3 rounded-xl font-bold hover:bg-orange-600 transition-all shadow-md">🚀 Launch Live Game</button>
-                        <button onclick="enterCollection('${c.id}', '${c.name}')" class="w-full bg-slate-100 text-slate-700 py-2 rounded-xl font-bold hover:bg-slate-200 transition-all">Questions</button>
-                        <button onclick="deleteCol('${c.id}')" class="w-full text-red-400 text-xs mt-2 hover:underline">Delete</button>
+                        <button onclick="launchGame('${c.id}', '${c.name}')" class="w-full bg-orange-500 text-white py-3 rounded-xl font-bold">🚀 Launch Game</button>
+                        <button onclick="enterCollection('${c.id}', '${c.name}')" class="w-full bg-slate-100 py-2 rounded-xl">Questions</button>
                     </div>
                 </div>
             `).join('');
         }
 
-        window.deleteCol = async (id) => {
-            if(confirm("Permanently delete collection?")) {
-                await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'collections', id));
-            }
-        };
-
-        // TEACHER: QUESTIONS
         window.enterCollection = (id, name) => {
             activeColId = id;
             document.getElementById('active-col-title').textContent = name;
@@ -296,133 +271,91 @@
             });
         }
 
-        window.openQuestionModal = (qId = null) => {
-            document.getElementById('q-id').value = qId || '';
-            document.getElementById('question-modal').classList.replace('hidden', 'flex');
-            if (!qId) document.getElementById('question-form').reset();
-        };
-
-        window.closeQuestionModal = () => document.getElementById('question-modal').classList.replace('flex', 'hidden');
-
-        document.getElementById('question-form').onsubmit = async (e) => {
-            e.preventDefault();
-            const id = document.getElementById('q-id').value;
-            const data = {
-                text: document.getElementById('q-text').value,
-                optA: document.getElementById('q-opt-a').value,
-                optB: document.getElementById('q-opt-b').value,
-                optC: document.getElementById('q-opt-c').value,
-                optD: document.getElementById('q-opt-d').value,
-                correct: document.getElementById('q-correct').value
-            };
-            if (id) await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'collections', activeColId, 'questions', id), data);
-            else await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'collections', activeColId, 'questions'), data);
-            closeQuestionModal();
-        };
-
-        function renderQuestions() {
-            const grid = document.getElementById('questions-grid');
-            grid.innerHTML = questionsList.map(q => `
-                <div class="bg-white p-4 rounded-xl border border-slate-200">
-                    <p class="font-bold text-slate-800 mb-2">${q.text}</p>
-                    <div class="text-xs text-slate-500 mb-2">Ans: ${q.correct} (${q['opt'+q.correct]})</div>
-                    <div class="flex gap-2">
-                        <button onclick="editQ('${q.id}')" class="text-indigo-600 text-xs font-bold">Edit</button>
-                        <button onclick="deleteQ('${q.id}')" class="text-red-500 text-xs font-bold">Delete</button>
-                    </div>
-                </div>
-            `).join('');
-        }
-
-        window.editQ = (id) => {
-            const q = questionsList.find(x => x.id === id);
-            document.getElementById('q-id').value = q.id;
-            document.getElementById('q-text').value = q.text;
-            document.getElementById('q-opt-a').value = q.optA;
-            document.getElementById('q-opt-b').value = q.optB;
-            document.getElementById('q-opt-c').value = q.optC;
-            document.getElementById('q-opt-d').value = q.optD;
-            document.getElementById('q-correct').value = q.correct;
-            openQuestionModal(id);
-        };
-
-        window.deleteQ = async (id) => {
-            await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'collections', activeColId, 'questions', id));
-        };
-
-        // LAUNCH GAME LOGIC
         window.launchGame = async (colId, colName) => {
-            try {
-                const code = Math.floor(100000 + Math.random() * 900000).toString();
-                
-                // Save session to public database
-                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'sessions', code), {
-                    teacherId: user.uid,
-                    collectionId: colId,
-                    title: colName,
-                    code: code,
-                    status: 'active',
-                    launchedAt: new Date().toISOString()
-                });
-
-                // Display code in custom modal (Not using alert)
-                document.getElementById('display-game-code').textContent = code;
-                document.getElementById('code-modal').classList.replace('hidden', 'flex');
-                
-            } catch (error) {
-                console.error("Launch error:", error);
-                alert("Failed to launch game. Check internet connection.");
-            }
+            const code = Math.floor(100000 + Math.random() * 900000).toString();
+            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'sessions', code), {
+                teacherId: user.uid, collectionId: colId, title: colName, code: code, status: 'active', launchedAt: new Date().toISOString()
+            });
+            document.getElementById('display-game-code').textContent = code;
+            document.getElementById('code-modal').classList.replace('hidden', 'flex');
         };
 
-        // STUDENT JOIN
+        // STUDENT LOGIC - FIXED JOIN
         document.getElementById('student-form').onsubmit = async (e) => {
             e.preventDefault();
             const name = document.getElementById('stu-name').value;
             const code = document.getElementById('stu-code').value;
+            const btn = document.getElementById('btn-student-join');
 
-            const sessSnap = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'sessions', code));
-            if (!sessSnap.exists()) {
-                alert("Invalid code. Ask your teacher for the current code.");
-                return;
+            btn.disabled = true;
+            btn.textContent = "Joining...";
+
+            try {
+                // 1. Sign in anonymously FIRST
+                if (!auth.currentUser) {
+                    await signInAnonymously(auth);
+                }
+
+                // 2. Fetch session from strict path
+                const sessionDoc = doc(db, 'artifacts', appId, 'public', 'data', 'sessions', code);
+                const sessSnap = await getDoc(sessionDoc);
+
+                if (!sessSnap.exists()) {
+                    alert("Invalid game code. Please double check with your teacher.");
+                    btn.disabled = false;
+                    btn.textContent = "Join Game";
+                    return;
+                }
+
+                const data = sessSnap.data();
+                
+                // 3. Switch UI
+                document.getElementById('auth-section').classList.add('hidden');
+                document.getElementById('student-game').classList.remove('hidden');
+                document.getElementById('game-title').textContent = data.title;
+                document.getElementById('player-display').textContent = `Player: ${name}`;
+
+                // 4. Load board
+                loadBingoAnswers(data.teacherId, data.collectionId);
+
+            } catch (err) {
+                console.error("Join Error:", err);
+                alert("Error joining game. Please try again.");
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "Join Game";
             }
-            
-            const sessionData = sessSnap.data();
-            await signInAnonymously(auth);
-            
-            document.getElementById('auth-section').classList.add('hidden');
-            document.getElementById('student-game').classList.remove('hidden');
-            document.getElementById('game-title').textContent = sessionData.title;
-            document.getElementById('player-display').textContent = `Player: ${name}`;
-            
-            loadBingoAnswers(sessionData.teacherId, sessionData.collectionId);
         };
 
         async function loadBingoAnswers(tId, cId) {
             const qRef = collection(db, 'artifacts', appId, 'users', tId, 'collections', cId, 'questions');
             onSnapshot(qRef, (snap) => {
-                const allAnswers = [];
-                snap.forEach(doc => {
-                    const d = doc.data();
-                    // Put all options into the pool
-                    allAnswers.push(d.optA, d.optB, d.optC, d.optD);
+                let pool = [];
+                snap.forEach(d => {
+                    const q = d.data();
+                    pool.push(q.optA, q.optB, q.optC, q.optD);
                 });
-                generateBingoCard(allAnswers);
+                generateBingoCard(pool);
+            }, (err) => {
+                console.error("Student read error:", err);
+                alert("Permission error: Ask your teacher to verify the game is live.");
             });
         }
 
         function generateBingoCard(pool) {
             const cardGrid = document.getElementById('bingo-card');
             cardGrid.innerHTML = '';
-            const finalPool = pool.length >= 24 ? pool : [...pool, ...Array(24).fill("???")];
-            const shuffled = finalPool.sort(() => 0.5 - Math.random()).slice(0, 24);
             
+            // Fillers if question pool is too small
+            while (pool.length < 24) pool.push("Quiz Space " + (pool.length + 1));
+            const shuffled = pool.sort(() => 0.5 - Math.random()).slice(0, 24);
+
             for (let i = 0; i < 25; i++) {
                 const cell = document.createElement('div');
-                cell.className = 'bingo-cell bg-white hover:bg-indigo-50 border rounded-lg p-1 text-[10px] leading-tight font-medium shadow-sm';
+                cell.className = 'bingo-cell bg-white border rounded-lg p-1 text-[10px] leading-tight font-medium shadow-sm hover:bg-slate-50 transition-colors';
                 if (i === 12) {
-                    cell.textContent = "FREE SPACE";
-                    cell.className += " marked free font-bold text-indigo-600";
+                    cell.textContent = "FREE";
+                    cell.classList.add('marked', 'free', 'text-indigo-600');
                 } else {
                     cell.textContent = shuffled.pop();
                     cell.onclick = () => cell.classList.toggle('marked');
@@ -431,11 +364,7 @@
             }
         }
 
-        window.checkBingo = () => {
-            const cells = document.querySelectorAll('.bingo-cell.marked');
-            if (cells.length >= 5) alert("BINGO submitted to teacher!");
-            else alert("Keep marking squares!");
-        };
+        window.checkBingo = () => alert("Bingo check submitted!");
 
     </script>
 </body>
