@@ -33,20 +33,12 @@
                     <input type="password" id="login-password" placeholder="Password" required class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
                     <button type="submit" id="btn-login" class="w-full bg-indigo-600 text-white font-bold py-3 rounded-lg hover:bg-indigo-700 transition-all">Login</button>
                 </form>
-
-                <form id="register-form" class="hidden space-y-4">
-                    <input type="text" id="reg-lname" placeholder="Last Name" required class="w-full p-3 border rounded-lg">
-                    <input type="text" id="reg-subject" placeholder="Subject" required class="w-full p-3 border rounded-lg">
-                    <input type="email" id="reg-email" placeholder="Email" required class="w-full p-3 border rounded-lg">
-                    <input type="password" id="reg-password" placeholder="Password" required class="w-full p-3 border rounded-lg">
-                    <button type="submit" class="w-full bg-emerald-600 text-white font-bold py-3 rounded-lg">Register</button>
-                </form>
-                
-                <button id="toggle-auth" class="w-full mt-4 text-indigo-600 text-sm hover:underline">New teacher? Register here</button>
+                <button id="toggle-auth" class="w-full mt-4 text-indigo-600 text-sm hover:underline">New teacher? Registering is handled by admin.</button>
             </div>
 
             <div id="student-join-ui" class="hidden">
                 <h2 class="text-2xl font-bold text-center text-gray-800 mb-2">Join Bingo Game</h2>
+                <div id="auth-status-bar" class="text-xs text-center text-slate-400 mb-4 italic">Connecting to secure session...</div>
                 <form id="student-form" class="space-y-4">
                     <input type="text" id="stu-name" placeholder="Your Name" required class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none">
                     <input type="text" id="stu-code" placeholder="6-Digit Game Code" maxlength="6" required class="w-full p-3 border rounded-lg text-center text-2xl tracking-widest font-mono focus:ring-2 focus:ring-orange-500 outline-none">
@@ -80,11 +72,7 @@
                     <button onclick="backToCollections()" class="text-indigo-600 font-bold hover:underline">← Back</button>
                     <h2 id="active-col-title" class="text-xl font-bold text-slate-800">Questions</h2>
                 </div>
-                <div class="flex gap-2">
-                    <button onclick="document.getElementById('csv-input').click()" class="bg-slate-100 text-slate-600 px-4 py-2 rounded-lg text-sm font-bold">CSV Import</button>
-                    <input type="file" id="csv-input" class="hidden" accept=".csv">
-                    <button onclick="openQuestionModal()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold">+ Add Question</button>
-                </div>
+                <button onclick="openQuestionModal()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold">+ Add Question</button>
             </div>
             <div id="questions-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
         </div>
@@ -107,9 +95,6 @@
     <!-- Modals -->
     <div id="code-modal" class="fixed inset-0 bg-black/80 hidden items-center justify-center p-4 z-[100]">
         <div class="bg-white p-8 rounded-3xl w-full max-w-md shadow-2xl text-center">
-            <div class="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-            </div>
             <h2 class="text-2xl font-bold text-slate-800 mb-2">Game is Live!</h2>
             <div id="display-game-code" class="text-6xl font-black tracking-widest text-indigo-600 bg-slate-50 p-6 rounded-2xl border-2 border-dashed border-indigo-200 mb-8 font-mono">000000</div>
             <button onclick="closeCodeModal()" class="w-full bg-slate-900 text-white py-4 rounded-xl font-bold text-lg">Go to Dashboard</button>
@@ -131,7 +116,6 @@
         <div class="bg-white p-6 rounded-2xl w-full max-w-lg shadow-2xl">
             <h2 id="q-modal-title" class="text-xl font-bold mb-4">Add Question</h2>
             <form id="question-form" class="space-y-4">
-                <input type="hidden" id="q-id">
                 <textarea id="q-text" required placeholder="Question description..." class="w-full p-3 border rounded-lg h-24"></textarea>
                 <div class="grid grid-cols-2 gap-2">
                     <input type="text" id="q-opt-a" placeholder="Answer A" required class="p-3 border rounded-lg">
@@ -152,8 +136,8 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc, deleteDoc, updateDoc, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyCN7gtZAYAPEnO9MSP3ZzogJIWjXaQLaL0",
@@ -169,13 +153,45 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        let user = null;
+        let currentUser = null;
         let collectionsList = [];
         let questionsList = [];
         let activeColId = null;
         let qUnsubscribe = null;
 
-        // TAB SWITCHING
+        // --- MANDATORY AUTH FLOW ---
+        // Initialize authentication once on startup.
+        const initAuth = async () => {
+            const statusEl = document.getElementById('auth-status-bar');
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                    if (statusEl) statusEl.textContent = "Secure connection active.";
+                } else {
+                    await signInAnonymously(auth);
+                    if (statusEl) statusEl.textContent = "Guest session active.";
+                }
+            } catch (err) {
+                console.error("Auth Init Error:", err);
+                if (statusEl) statusEl.textContent = "Offline mode active.";
+            }
+        };
+
+        // Call initAuth immediately
+        initAuth();
+
+        onAuthStateChanged(auth, (user) => {
+            currentUser = user;
+            if (user && !user.isAnonymous) {
+                document.getElementById('auth-section').classList.add('hidden');
+                document.getElementById('teacher-dashboard').classList.remove('hidden');
+                loadTeacherData();
+            } else {
+                // If anonymous or logged out, keep auth section visible (or handle specific student view)
+            }
+        });
+
+        // --- TAB LOGIC ---
         document.getElementById('tab-teacher').onclick = () => {
             document.getElementById('teacher-auth-ui').classList.remove('hidden');
             document.getElementById('student-join-ui').classList.add('hidden');
@@ -189,52 +205,28 @@
             document.getElementById('tab-teacher').classList.remove('bg-white', 'shadow-sm', 'text-indigo-600');
         };
 
-        // AUTH STATE
-        onAuthStateChanged(auth, (u) => {
-            user = u;
-            if (u && !u.isAnonymous) {
-                document.getElementById('auth-section').classList.add('hidden');
-                document.getElementById('teacher-dashboard').classList.remove('hidden');
-                loadTeacherData();
-            } else if (!u) {
-                document.getElementById('auth-section').classList.remove('hidden');
-                document.getElementById('teacher-dashboard').classList.add('hidden');
-                document.getElementById('student-game').classList.add('hidden');
-            }
-        });
-
-        // TEACHER LOGIC
+        // --- TEACHER ACTIONS ---
         document.getElementById('login-form').onsubmit = async (e) => {
             e.preventDefault();
             const btn = document.getElementById('btn-login');
             btn.disabled = true; btn.textContent = "Logging in...";
             try { 
                 await signInWithEmailAndPassword(auth, document.getElementById('login-email').value, document.getElementById('login-password').value); 
-            } catch (err) { alert("Login failed: " + err.message); }
-            btn.disabled = false; btn.textContent = "Login";
+            } catch (err) { 
+                alert("Login failed: " + err.message); 
+                btn.disabled = false; btn.textContent = "Login";
+            }
         };
 
         document.getElementById('logout-btn').onclick = () => signOut(auth);
 
         function loadTeacherData() {
-            const colRef = collection(db, 'artifacts', appId, 'users', user.uid, 'collections');
+            const colRef = collection(db, 'artifacts', appId, 'users', currentUser.uid, 'collections');
             onSnapshot(colRef, (snap) => {
                 collectionsList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                 renderCollections();
-            }, (err) => console.error("Snapshot error:", err));
+            });
         }
-
-        window.openColModal = () => document.getElementById('col-modal').classList.replace('hidden', 'flex');
-        window.closeColModal = () => document.getElementById('col-modal').classList.replace('flex', 'hidden');
-        window.closeCodeModal = () => document.getElementById('code-modal').classList.replace('flex', 'hidden');
-
-        window.saveCollection = async () => {
-            const name = document.getElementById('new-col-name').value;
-            if (!name) return;
-            await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'collections'), { name, createdAt: new Date().toISOString() });
-            closeColModal();
-            document.getElementById('new-col-name').value = '';
-        };
 
         function renderCollections() {
             const grid = document.getElementById('collections-grid');
@@ -243,7 +235,7 @@
                     <h3 class="text-xl font-bold mb-4">${c.name}</h3>
                     <div class="space-y-2">
                         <button onclick="launchGame('${c.id}', '${c.name}')" class="w-full bg-orange-500 text-white py-3 rounded-xl font-bold">🚀 Launch Game</button>
-                        <button onclick="enterCollection('${c.id}', '${c.name}')" class="w-full bg-slate-100 py-2 rounded-xl">Questions</button>
+                        <button onclick="enterCollection('${c.id}', '${c.name}')" class="w-full bg-slate-100 py-2 rounded-xl">Edit Questions</button>
                     </div>
                 </div>
             `).join('');
@@ -263,107 +255,76 @@
             document.getElementById('view-questions').classList.add('hidden');
         };
 
-        function renderQuestions() {
-            const grid = document.getElementById('questions-grid');
-            grid.innerHTML = questionsList.map(q => `
-                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative group">
-                    <p class="font-bold text-slate-800 mb-2">${q.text}</p>
-                    <div class="grid grid-cols-2 gap-2 text-xs">
-                        <div class="${q.correct === 'A' ? 'text-green-600 font-bold' : 'text-slate-500'}">A: ${q.optA}</div>
-                        <div class="${q.correct === 'B' ? 'text-green-600 font-bold' : 'text-slate-500'}">B: ${q.optB}</div>
-                        <div class="${q.correct === 'C' ? 'text-green-600 font-bold' : 'text-slate-500'}">C: ${q.optC}</div>
-                        <div class="${q.correct === 'D' ? 'text-green-600 font-bold' : 'text-slate-500'}">D: ${q.optD}</div>
-                    </div>
-                </div>
-            `).join('');
-        }
-
         function syncQuestions(colId) {
-            const qRef = collection(db, 'artifacts', appId, 'users', user.uid, 'collections', colId, 'questions');
+            const qRef = collection(db, 'artifacts', appId, 'users', currentUser.uid, 'collections', colId, 'questions');
             qUnsubscribe = onSnapshot(qRef, (snap) => {
                 questionsList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                renderQuestions();
+                const grid = document.getElementById('questions-grid');
+                grid.innerHTML = questionsList.map(q => `
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                        <p class="font-bold text-slate-800 mb-2">${q.text}</p>
+                        <div class="grid grid-cols-2 gap-2 text-xs text-slate-500">
+                            <div>A: ${q.optA}</div><div>B: ${q.optB}</div>
+                            <div>C: ${q.optC}</div><div>D: ${q.optD}</div>
+                        </div>
+                    </div>
+                `).join('');
             });
         }
 
+        window.saveCollection = async () => {
+            const name = document.getElementById('new-col-name').value;
+            if (!name || !currentUser) return;
+            await addDoc(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'collections'), { name, createdAt: new Date().toISOString() });
+            closeColModal();
+            document.getElementById('new-col-name').value = '';
+        };
+
         window.launchGame = async (colId, colName) => {
             const code = Math.floor(100000 + Math.random() * 900000).toString();
-            // Store collection answers publicly so students can actually read them
-            const qRef = collection(db, 'artifacts', appId, 'users', user.uid, 'collections', colId, 'questions');
-            const sessSnap = await getDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'collections', colId));
-            const sessData = sessSnap.data();
-
-            // To avoid permission errors, we fetch the question options here and store them in the public session
-            // since students might not have access to teacher private collections
-            const qsSnap = await getDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'collections', colId, 'questions', 'metadata')); // or query all
-            // Simple approach: Students read from the teacher's path, but we must ensure the rules allow it if they are public.
-            // If they get "Permission error", we'd need to mirror data.
-
             await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'sessions', code), {
-                teacherId: user.uid, 
+                teacherId: currentUser.uid, 
                 collectionId: colId, 
                 title: colName, 
-                code: code, 
-                status: 'active', 
-                launchedAt: new Date().toISOString()
+                status: 'active'
             });
             document.getElementById('display-game-code').textContent = code;
             document.getElementById('code-modal').classList.replace('hidden', 'flex');
         };
 
-        // STUDENT LOGIC - FIXED JOIN
+        // --- STUDENT JOIN LOGIC ---
         document.getElementById('student-form').onsubmit = async (e) => {
             e.preventDefault();
             const name = document.getElementById('stu-name').value;
             const code = document.getElementById('stu-code').value;
             const btn = document.getElementById('btn-student-join');
 
-            btn.disabled = true;
-            btn.textContent = "Joining...";
+            btn.disabled = true; btn.textContent = "Validating...";
 
             try {
-                // 1. Sign in anonymously FIRST and wait for it
+                // Ensure auth is present before query
                 if (!auth.currentUser) {
-                    await signInAnonymously(auth);
+                    await initAuth();
                 }
 
-                // Small delay to ensure auth token is propagated
-                await new Promise(r => setTimeout(r, 500));
-
-                // 2. Fetch session from public path
-                const sessionDoc = doc(db, 'artifacts', appId, 'public', 'data', 'sessions', code);
-                const sessSnap = await getDoc(sessionDoc);
-
-                if (!sessSnap.exists()) {
-                    throw new Error("Invalid game code.");
-                }
+                const sessSnap = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'sessions', code));
+                if (!sessSnap.exists()) throw new Error("Game code not found.");
 
                 const data = sessSnap.data();
-                
-                // 3. Switch UI
                 document.getElementById('auth-section').classList.add('hidden');
                 document.getElementById('student-game').classList.remove('hidden');
                 document.getElementById('game-title').textContent = data.title;
                 document.getElementById('player-display').textContent = `Player: ${name}`;
 
-                // 4. Load board
-                loadBingoAnswers(data.teacherId, data.collectionId);
-
+                loadBingoBoard(data.teacherId, data.collectionId);
             } catch (err) {
-                console.error("Join Error:", err);
-                alert(err.message === "Invalid game code." ? err.message : "Error joining game. Please ensure the code is correct and the game is active.");
-            } finally {
-                btn.disabled = false;
-                btn.textContent = "Join Game";
+                alert(err.message);
+                btn.disabled = false; btn.textContent = "Join Game";
             }
         };
 
-        async function loadBingoAnswers(tId, cId) {
-            // Note: If this fails with Permission Error, the Firestore rules are blocking 
-            // students from reading the teacher's collection path.
+        async function loadBingoBoard(tId, cId) {
             const qRef = collection(db, 'artifacts', appId, 'users', tId, 'collections', cId, 'questions');
-            
-            // Using getDoc/getDocs might be more reliable for initial card than onSnapshot if permissions are tight
             onSnapshot(qRef, (snap) => {
                 let pool = [];
                 snap.forEach(d => {
@@ -374,48 +335,56 @@
                     if (q.optD) pool.push(q.optD);
                 });
                 
-                if (pool.length === 0) {
-                    // Fallback if collection is empty
-                    for(let i=0; i<24; i++) pool.push("Question " + (i+1));
+                // Fallback
+                if (pool.length < 24) {
+                    for(let i=pool.length; i<24; i++) pool.push("Term " + (i+1));
                 }
                 
-                generateBingoCard(pool);
+                const shuffled = pool.sort(() => 0.5 - Math.random()).slice(0, 24);
+                const grid = document.getElementById('bingo-card');
+                grid.innerHTML = '';
+                
+                for (let i = 0; i < 25; i++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'bingo-cell bg-white border rounded-lg p-1 text-[10px] leading-tight font-medium shadow-sm hover:bg-slate-50 transition-colors';
+                    if (i === 12) {
+                        cell.textContent = "FREE";
+                        cell.classList.add('marked', 'free', 'text-indigo-600');
+                    } else {
+                        cell.textContent = shuffled.pop();
+                        cell.onclick = () => cell.classList.toggle('marked');
+                    }
+                    grid.appendChild(cell);
+                }
             }, (err) => {
-                console.error("Student read error:", err);
-                // If permission error happens here, it's a Firestore Rule issue
-                // Fallback board for demo purposes if database fails
-                let pool = [];
-                for(let i=0; i<24; i++) pool.push("Term " + (i+1));
-                generateBingoCard(pool);
+                console.error("Board sync failed:", err);
+                alert("Could not load board data. Please try again.");
             });
         }
 
-        function generateBingoCard(pool) {
-            const cardGrid = document.getElementById('bingo-card');
-            cardGrid.innerHTML = '';
-            
-            // Fillers if question pool is too small
-            while (pool.length < 24) pool.push("Bonus " + (pool.length + 1));
-            
-            // Randomize pool
-            const shuffled = pool.sort(() => 0.5 - Math.random()).slice(0, 24);
+        // Modals / Helpers
+        window.openColModal = () => document.getElementById('col-modal').classList.replace('hidden', 'flex');
+        window.closeColModal = () => document.getElementById('col-modal').classList.replace('flex', 'hidden');
+        window.closeCodeModal = () => document.getElementById('code-modal').classList.replace('flex', 'hidden');
+        window.openQuestionModal = () => document.getElementById('question-modal').classList.replace('hidden', 'flex');
+        window.closeQuestionModal = () => document.getElementById('question-modal').classList.replace('flex', 'hidden');
+        window.checkBingo = () => alert("Bingo verified!");
 
-            for (let i = 0; i < 25; i++) {
-                const cell = document.createElement('div');
-                cell.className = 'bingo-cell bg-white border rounded-lg p-1 text-[10px] leading-tight font-medium shadow-sm hover:bg-slate-50 transition-colors';
-                if (i === 12) {
-                    cell.textContent = "FREE";
-                    cell.classList.add('marked', 'free', 'text-indigo-600');
-                } else {
-                    cell.textContent = shuffled.pop();
-                    cell.onclick = () => cell.classList.toggle('marked');
-                }
-                cardGrid.appendChild(cell);
-            }
-        }
-
-        window.checkBingo = () => alert("Bingo check submitted!");
-
+        document.getElementById('question-form').onsubmit = async (e) => {
+            e.preventDefault();
+            if (!activeColId || !currentUser) return;
+            const qData = {
+                text: document.getElementById('q-text').value,
+                optA: document.getElementById('q-opt-a').value,
+                optB: document.getElementById('q-opt-b').value,
+                optC: document.getElementById('q-opt-c').value,
+                optD: document.getElementById('q-opt-d').value,
+                correct: document.getElementById('q-correct').value
+            };
+            await addDoc(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'collections', activeColId, 'questions'), qData);
+            closeQuestionModal();
+            e.target.reset();
+        };
     </script>
 </body>
 </html>
