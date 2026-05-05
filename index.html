@@ -516,6 +516,9 @@
                 } 
                 else if (markedCellsState.includes(i)) {
                     cell.classList.add('marked');
+                    // Ensure marked cells don't look clickable
+                    cell.classList.remove('hover:bg-slate-50', 'cursor-pointer');
+                    cell.classList.add('cursor-default');
                 } 
                 else if (cellCooldowns[i] && cellCooldowns[i] > Date.now()) {
                     // Lock cell visually for cooldown
@@ -526,19 +529,17 @@
                 }
 
                 cell.onclick = () => {
+                    // Disallow click if Free space
                     if (item === "FREE" || i === 12) return; 
+                    
+                    // Disallow click if already correctly answered (marked)
+                    if (markedCellsState.includes(i)) return;
                     
                     // Disallow click if on cooldown
                     if (cellCooldowns[i] && cellCooldowns[i] > Date.now()) return;
                     
-                    if (cell.classList.contains('marked')) {
-                        // Allow unmarking
-                        cell.classList.remove('marked');
-                        markedCellsState = markedCellsState.filter(idx => idx !== i);
-                        localStorage.setItem(activeMarkedKey, JSON.stringify(markedCellsState));
-                    } else {
-                        presentQuestion(cell, i);
-                    }
+                    // Show question
+                    presentQuestion(cell, i);
                 };
                 grid.appendChild(cell);
             });
