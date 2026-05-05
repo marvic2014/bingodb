@@ -78,7 +78,11 @@
                     <button onclick="backToCollections()" class="text-indigo-600 font-bold hover:underline">← Back</button>
                     <h2 id="active-col-title" class="text-xl font-bold text-slate-800">Questions</h2>
                 </div>
-                <button onclick="openQuestionModal()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold">+ Add Question</button>
+                <div class="flex gap-2">
+                    <button onclick="document.getElementById('csv-input').click()" id="btn-csv-import" class="bg-slate-100 text-slate-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-slate-200 transition-colors">CSV Import</button>
+                    <input type="file" id="csv-input" class="hidden" accept=".csv">
+                    <button onclick="openQuestionModal()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-700 transition-colors">+ Add Question</button>
+                </div>
             </div>
             <div id="questions-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
         </div>
@@ -368,6 +372,57 @@
             document.getElementById('code-modal').classList.replace('hidden', 'flex');
         };
 
+        // --- CSV IMPORT LOGIC ---
+        document.getElementById('csv-input').onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            if (!activeColId) {
+                alert("Please select or open a collection first.");
+                e.target.value = '';
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = async (ev) => {
+                const rows = ev.target.result.split('\n');
+                let importCount = 0;
+                
+                const importBtn = document.getElementById('btn-csv-import');
+                const originalText = importBtn.textContent;
+                importBtn.textContent = "Importing...";
+                importBtn.disabled = true;
+
+                for (let r of rows) {
+                    const c = r.split(',').map(x => x.trim());
+                    // Skip empty rows and ensure enough columns
+                    if (c.length >= 6 && c[0] !== '') {
+                        try {
+                            await addDoc(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'collections', activeColId, 'questions'), {
+                                text: c[0],
+                                optA: c[1],
+                                optB: c[2],
+                                optC: c[3],
+                                optD: c[4],
+                                correct: c[5].toUpperCase()
+                            });
+                            importCount++;
+                        } catch (err) {
+                            console.error("Error importing row:", err);
+                        }
+                    }
+                }
+                
+                importBtn.textContent = originalText;
+                importBtn.disabled = false;
+                e.target.value = ''; 
+                
+                alert(`Successfully imported ${importCount} questions!`);
+            };
+            
+            reader.readAsText(file);
+        };
+
         // --- STUDENT LOGIC ---
         document.getElementById('student-form').onsubmit = async (e) => {
             e.preventDefault();
@@ -482,61 +537,6 @@
             e.target.reset();
         };
 
-        // --- CSV IMPORT LOGIC ---
-        document.getElementById('csv-input').onchange = (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            // Ensure a collection is open
-            if (!activeColId) {
-                alert("Please select or open a collection first.");
-                e.target.value = '';
-                return;
-            }
-
-            const reader = new FileReader();
-            reader.onload = async (ev) => {
-                const rows = ev.target.result.split('\n');
-                let importCount = 0;
-                
-                // Visual feedback
-                const importBtn = document.querySelector('button[onclick="document.getElementById(\'csv-input\').click()"]');
-                const originalText = importBtn.textContent;
-                importBtn.textContent = "Importing...";
-                importBtn.disabled = true;
-
-                for (let r of rows) {
-                    // Split row by comma and trim spaces
-                    const c = r.split(',').map(x => x.trim());
-                    
-                    // Expect format: Question, A, B, C, D, CorrectLetter
-                    if (c.length >= 6 && c[0] !== '') {
-                        try {
-                            await addDoc(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'collections', activeColId, 'questions'), {
-                                text: c[0],
-                                optA: c[1],
-                                optB: c[2],
-                                optC: c[3],
-                                optD: c[4],
-                                correct: c[5].toUpperCase()
-                            });
-                            importCount++;
-                        } catch (err) {
-                            console.error("Error importing row:", err);
-                        }
-                    }
-                }
-                
-                // Reset UI
-                importBtn.textContent = originalText;
-                importBtn.disabled = false;
-                e.target.value = ''; 
-                
-                alert(`Successfully imported ${importCount} questions!`);
-            };
-            
-            reader.readAsText(file);
-        };
     </script>
 </body>
 </html>
