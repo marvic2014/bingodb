@@ -282,7 +282,12 @@
 
         window.destroySession = async (code) => {
             if (confirm("End this session? All student progress for this code will be lost.")) {
-                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'sessions', code));
+                try {
+                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'sessions', code));
+                } catch (error) {
+                    console.error("Failed to end session:", error);
+                    alert("Could not end the session. Please update your Firebase Rules to allow 'delete'.");
+                }
             }
         };
 
@@ -475,6 +480,62 @@
             await addDoc(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'collections', activeColId, 'questions'), qData);
             closeQuestionModal();
             e.target.reset();
+        };
+
+        // --- CSV IMPORT LOGIC ---
+        document.getElementById('csv-input').onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            // Ensure a collection is open
+            if (!activeColId) {
+                alert("Please select or open a collection first.");
+                e.target.value = '';
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = async (ev) => {
+                const rows = ev.target.result.split('\n');
+                let importCount = 0;
+                
+                // Visual feedback
+                const importBtn = document.querySelector('button[onclick="document.getElementById(\'csv-input\').click()"]');
+                const originalText = importBtn.textContent;
+                importBtn.textContent = "Importing...";
+                importBtn.disabled = true;
+
+                for (let r of rows) {
+                    // Split row by comma and trim spaces
+                    const c = r.split(',').map(x => x.trim());
+                    
+                    // Expect format: Question, A, B, C, D, CorrectLetter
+                    if (c.length >= 6 && c[0] !== '') {
+                        try {
+                            await addDoc(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'collections', activeColId, 'questions'), {
+                                text: c[0],
+                                optA: c[1],
+                                optB: c[2],
+                                optC: c[3],
+                                optD: c[4],
+                                correct: c[5].toUpperCase()
+                            });
+                            importCount++;
+                        } catch (err) {
+                            console.error("Error importing row:", err);
+                        }
+                    }
+                }
+                
+                // Reset UI
+                importBtn.textContent = originalText;
+                importBtn.disabled = false;
+                e.target.value = ''; 
+                
+                alert(`Successfully imported ${importCount} questions!`);
+            };
+            
+            reader.readAsText(file);
         };
     </script>
 </body>
