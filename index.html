@@ -480,11 +480,12 @@
             grid.innerHTML = '';
             boardItems.forEach((item, i) => {
                 const cell = document.createElement('div');
-                cell.className = 'bingo-cell bg-white border rounded-lg p-1 text-[10px] leading-tight font-medium shadow-sm hover:bg-slate-50 transition-all';
+                cell.className = 'bingo-cell bg-white border rounded-lg p-1 text-lg leading-tight font-bold shadow-sm hover:bg-slate-50 transition-all';
                 cell.textContent = item;
                 if (item === "FREE" || i === 12) {
                     cell.textContent = "FREE";
-                    cell.classList.add('marked', 'free', 'text-indigo-600');
+                    cell.classList.add('marked', 'free', 'text-indigo-600', 'text-sm');
+                    cell.classList.remove('text-lg');
                 }
                 cell.onclick = () => {
                     cell.classList.toggle('marked');
@@ -494,18 +495,35 @@
         }
 
         function generateBingoBoard(pool, storageKey) {
-            let workingPool = [...pool];
-            if (workingPool.length === 0) {
-                for(let i=1; i<=24; i++) workingPool.push("Term " + i);
-            }
-            while (workingPool.length < 24) workingPool.push("Bonus " + (workingPool.length + 1));
-            
-            const shuffled = workingPool.sort(() => 0.5 - Math.random()).slice(0, 24);
+            // Helper to get random unique numbers in a range
+            const getNumbers = (min, max, count) => {
+                const nums = [];
+                for (let i = min; i <= max; i++) nums.push(i);
+                return nums.sort(() => 0.5 - Math.random()).slice(0, count);
+            };
+
+            // Standard Bingo ranges
+            const b = getNumbers(1, 15, 5);
+            const i_col = getNumbers(16, 30, 5);
+            const n = getNumbers(31, 45, 5);
+            const g = getNumbers(46, 60, 5);
+            const o = getNumbers(61, 75, 5);
+
             const boardItems = [];
             
-            for(let i=0; i<25; i++) {
-                if (i === 12) boardItems.push("FREE");
-                else boardItems.push(shuffled.pop());
+            // Build the card row by row for CSS Grid (5 columns)
+            for (let row = 0; row < 5; row++) {
+                boardItems.push(b[row]);
+                boardItems.push(i_col[row]);
+                
+                if (row === 2) {
+                    boardItems.push("FREE");
+                } else {
+                    boardItems.push(n[row]);
+                }
+                
+                boardItems.push(g[row]);
+                boardItems.push(o[row]);
             }
 
             // Save for persistence
