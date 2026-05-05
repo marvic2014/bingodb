@@ -115,6 +115,17 @@
     </div>
 
     <!-- Modals -->
+    <!-- Student Question Modal -->
+    <div id="student-question-modal" class="fixed inset-0 bg-black/90 hidden items-center justify-center p-4 z-[120]">
+        <div class="bg-white p-8 rounded-3xl w-full max-w-lg shadow-2xl flex flex-col">
+            <h3 class="text-xl font-bold text-slate-800 mb-6 text-center" id="sq-text">Question text goes here?</h3>
+            <div class="flex flex-col gap-3 mb-6" id="sq-options">
+                <!-- Options injected here -->
+            </div>
+            <button onclick="closeStudentQuestionModal()" class="mt-2 text-slate-500 font-bold hover:text-slate-700 p-2">Cancel</button>
+        </div>
+    </div>
+
     <div id="code-modal" class="fixed inset-0 bg-black/80 hidden items-center justify-center p-4 z-[100]">
         <div class="bg-white p-8 rounded-3xl w-full max-w-md shadow-2xl text-center">
             <h2 class="text-2xl font-bold text-slate-800 mb-2">Game is Live!</h2>
@@ -182,6 +193,8 @@
         let qUnsubscribe = null;
         let sessionUnsubscribe = null;
         let authPromise = null;
+        let currentSessionQuestions = [];
+        let markedCellsState = [];
 
         const initAuth = async () => {
             if (authPromise) return authPromise;
@@ -351,13 +364,9 @@
 
         window.launchGame = async (colId, colName) => {
             const qSnap = await getDocs(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'collections', colId, 'questions'));
-            let allTerms = [];
+            let fullQuestions = [];
             qSnap.forEach(doc => {
-                const q = doc.data();
-                if(q.optA) allTerms.push(q.optA);
-                if(q.optB) allTerms.push(q.optB);
-                if(q.optC) allTerms.push(q.optC);
-                if(q.optD) allTerms.push(q.optD);
+                fullQuestions.push(doc.data());
             });
 
             const code = Math.floor(100000 + Math.random() * 900000).toString();
@@ -366,7 +375,7 @@
                 collectionId: colId, 
                 title: colName, 
                 status: 'active',
-                terms: allTerms 
+                questions: fullQuestions 
             });
             document.getElementById('display-game-code').textContent = code;
             document.getElementById('code-modal').classList.replace('hidden', 'flex');
@@ -443,14 +452,20 @@
                 document.getElementById('game-title').textContent = data.title;
                 document.getElementById('player-display').textContent = `Player: ${name}`;
 
+                // Store session questions globally for the modal
+                currentSessionQuestions = data.questions || [];
+
                 // Persistence: Check if board exists for this session+name
                 const storageKey = `bingo_board_${code}_${name}`;
+                const markedKey = `bingo_marked_${code}_${name}`;
+                
                 let savedBoard = localStorage.getItem(storageKey);
+                markedCellsState = JSON.parse(localStorage.getItem(markedKey)) || [];
                 
                 if (savedBoard) {
-                    renderBoardFromData(JSON.parse(savedBoard));
+                    renderBoardFromData(JSON.parse(savedBoard), markedKey);
                 } else {
-                    generateBingoBoard(data.terms || [], storageKey);
+                    generateBingoBoard(storageKey, markedKey);
                 }
 
                 // Watch session for destruction
@@ -475,26 +490,80 @@
             document.getElementById('btn-student-join').textContent = "Join Game";
         };
 
-        function renderBoardFromData(boardItems) {
+        function renderBoardFromData(boardItems, markedKey) {
             const grid = document.getElementById('bingo-card');
             grid.innerHTML = '';
             boardItems.forEach((item, i) => {
                 const cell = document.createElement('div');
                 cell.className = 'bingo-cell bg-white border rounded-lg p-1 text-lg leading-tight font-bold shadow-sm hover:bg-slate-50 transition-all';
                 cell.textContent = item;
+                
                 if (item === "FREE" || i === 12) {
                     cell.textContent = "FREE";
                     cell.classList.add('marked', 'free', 'text-indigo-600', 'text-sm');
                     cell.classList.remove('text-lg');
+                } else if (markedCellsState.includes(i)) {
+                    cell.classList.add('marked');
                 }
+                
                 cell.onclick = () => {
-                    cell.classList.toggle('marked');
+                    if (item === "FREE" || i === 12) return; // Free space is always marked
+                    
+                    if (cell.classList.contains('marked')) {
+                        // Allow unmarking
+                        cell.classList.remove('marked');
+                        markedCellsState = markedCellsState.filter(idx => idx !== i);
+                        localStorage.setItem(markedKey, JSON.stringify(markedCellsState));
+                    } else {
+                        // Unmarked cell clicked -> Show random question
+                        presentQuestion(cell, i, markedKey);
+                    }
                 };
                 grid.appendChild(cell);
             });
         }
 
-        function generateBingoBoard(pool, storageKey) {
+        function presentQuestion(cell, index, markedKey) {
+            if (currentSessionQuestions.length === 0) {
+                alert("No questions available in this session!");
+                return;
+            }
+            const q = currentSessionQuestions[Math.floor(Math.random() * currentSessionQuestions.length)];
+            
+            document.getElementById('sq-text').textContent = q.text;
+            const optionsDiv = document.getElementById('sq-options');
+            optionsDiv.innerHTML = '';
+            
+            ['A', 'B', 'C', 'D'].forEach(letter => {
+                const optText = q['opt' + letter];
+                if (!optText) return;
+                const btn = document.createElement('button');
+                btn.className = "w-full p-4 text-left border-2 border-slate-200 rounded-xl font-medium hover:border-indigo-500 hover:bg-indigo-50 transition-all";
+                btn.textContent = `${letter}: ${optText}`;
+                btn.onclick = () => {
+                    if (letter === q.correct) {
+                        cell.classList.add('marked');
+                        if (!markedCellsState.includes(index)) {
+                            markedCellsState.push(index);
+                            localStorage.setItem(markedKey, JSON.stringify(markedCellsState));
+                        }
+                        closeStudentQuestionModal();
+                    } else {
+                        alert("Incorrect! You cannot mark this square yet.");
+                        closeStudentQuestionModal();
+                    }
+                };
+                optionsDiv.appendChild(btn);
+            });
+
+            document.getElementById('student-question-modal').classList.replace('hidden', 'flex');
+        }
+
+        window.closeStudentQuestionModal = () => {
+            document.getElementById('student-question-modal').classList.replace('flex', 'hidden');
+        };
+
+        function generateBingoBoard(storageKey, markedKey) {
             // Helper to get random unique numbers in a range
             const getNumbers = (min, max, count) => {
                 const nums = [];
@@ -528,7 +597,7 @@
 
             // Save for persistence
             localStorage.setItem(storageKey, JSON.stringify(boardItems));
-            renderBoardFromData(boardItems);
+            renderBoardFromData(boardItems, markedKey);
         }
 
         // Standard Modal/UI Handlers
