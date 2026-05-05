@@ -137,7 +137,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyCN7gtZAYAPEnO9MSP3ZzogJIWjXaQLaL0",
@@ -160,7 +160,6 @@
         let qUnsubscribe = null;
 
         // --- MANDATORY AUTH FLOW ---
-        // Initialize authentication once on startup.
         const initAuth = async () => {
             const statusEl = document.getElementById('auth-status-bar');
             try {
@@ -177,7 +176,6 @@
             }
         };
 
-        // Call initAuth immediately
         initAuth();
 
         onAuthStateChanged(auth, (user) => {
@@ -186,8 +184,6 @@
                 document.getElementById('auth-section').classList.add('hidden');
                 document.getElementById('teacher-dashboard').classList.remove('hidden');
                 loadTeacherData();
-            } else {
-                // If anonymous or logged out, keep auth section visible (or handle specific student view)
             }
         });
 
@@ -281,12 +277,25 @@
         };
 
         window.launchGame = async (colId, colName) => {
+            // FIX: Pull all questions from the collection to store in the PUBLIC session
+            // because students can't read the private teacher folder.
+            const qSnap = await getDocs(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'collections', colId, 'questions'));
+            let allTerms = [];
+            qSnap.forEach(doc => {
+                const q = doc.data();
+                if(q.optA) allTerms.push(q.optA);
+                if(q.optB) allTerms.push(q.optB);
+                if(q.optC) allTerms.push(q.optC);
+                if(q.optD) allTerms.push(q.optD);
+            });
+
             const code = Math.floor(100000 + Math.random() * 900000).toString();
             await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'sessions', code), {
                 teacherId: currentUser.uid, 
                 collectionId: colId, 
                 title: colName, 
-                status: 'active'
+                status: 'active',
+                terms: allTerms // Store terms publicly for the board
             });
             document.getElementById('display-game-code').textContent = code;
             document.getElementById('code-modal').classList.replace('hidden', 'flex');
@@ -302,10 +311,7 @@
             btn.disabled = true; btn.textContent = "Validating...";
 
             try {
-                // Ensure auth is present before query
-                if (!auth.currentUser) {
-                    await initAuth();
-                }
+                if (!auth.currentUser) await initAuth();
 
                 const sessSnap = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'sessions', code));
                 if (!sessSnap.exists()) throw new Error("Game code not found.");
@@ -316,50 +322,39 @@
                 document.getElementById('game-title').textContent = data.title;
                 document.getElementById('player-display').textContent = `Player: ${name}`;
 
-                loadBingoBoard(data.teacherId, data.collectionId);
+                // Load board from the PUBLIC terms stored in the session
+                generateBingoBoard(data.terms || []);
             } catch (err) {
                 alert(err.message);
                 btn.disabled = false; btn.textContent = "Join Game";
             }
         };
 
-        async function loadBingoBoard(tId, cId) {
-            const qRef = collection(db, 'artifacts', appId, 'users', tId, 'collections', cId, 'questions');
-            onSnapshot(qRef, (snap) => {
-                let pool = [];
-                snap.forEach(d => {
-                    const q = d.data();
-                    if (q.optA) pool.push(q.optA);
-                    if (q.optB) pool.push(q.optB);
-                    if (q.optC) pool.push(q.optC);
-                    if (q.optD) pool.push(q.optD);
-                });
-                
-                // Fallback
-                if (pool.length < 24) {
-                    for(let i=pool.length; i<24; i++) pool.push("Term " + (i+1));
+        function generateBingoBoard(pool) {
+            // Fallback if pool is empty
+            if (!pool || pool.length === 0) {
+                for(let i=1; i<=24; i++) pool.push("Term " + i);
+            }
+            
+            // Ensure we have at least 24 unique items
+            while (pool.length < 24) pool.push("Bingo " + (pool.length + 1));
+            
+            const shuffled = pool.sort(() => 0.5 - Math.random()).slice(0, 24);
+            const grid = document.getElementById('bingo-card');
+            grid.innerHTML = '';
+            
+            for (let i = 0; i < 25; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'bingo-cell bg-white border rounded-lg p-1 text-[10px] leading-tight font-medium shadow-sm hover:bg-slate-50 transition-colors';
+                if (i === 12) {
+                    cell.textContent = "FREE";
+                    cell.classList.add('marked', 'free', 'text-indigo-600');
+                } else {
+                    cell.textContent = shuffled.pop();
+                    cell.onclick = () => cell.classList.toggle('marked');
                 }
-                
-                const shuffled = pool.sort(() => 0.5 - Math.random()).slice(0, 24);
-                const grid = document.getElementById('bingo-card');
-                grid.innerHTML = '';
-                
-                for (let i = 0; i < 25; i++) {
-                    const cell = document.createElement('div');
-                    cell.className = 'bingo-cell bg-white border rounded-lg p-1 text-[10px] leading-tight font-medium shadow-sm hover:bg-slate-50 transition-colors';
-                    if (i === 12) {
-                        cell.textContent = "FREE";
-                        cell.classList.add('marked', 'free', 'text-indigo-600');
-                    } else {
-                        cell.textContent = shuffled.pop();
-                        cell.onclick = () => cell.classList.toggle('marked');
-                    }
-                    grid.appendChild(cell);
-                }
-            }, (err) => {
-                console.error("Board sync failed:", err);
-                alert("Could not load board data. Please try again.");
-            });
+                grid.appendChild(cell);
+            }
         }
 
         // Modals / Helpers
