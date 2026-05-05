@@ -12,6 +12,7 @@
         .bingo-cell { aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; text-align: center; padding: 4px; font-size: 0.75rem; border: 1px solid #e2e8f0; cursor: pointer; transition: all 0.2s; overflow: hidden; word-break: break-word; }
         .bingo-cell.marked { background-color: #4f46e5; color: white; border-color: #4338ca; }
         .bingo-cell.free { background-color: #f1f5f9; font-weight: bold; }
+        .bingo-header { aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 1.25rem; color: #4f46e5; background: #eef2ff; border-radius: 8px; }
     </style>
 </head>
 <body class="bg-slate-50 min-h-screen font-sans">
@@ -33,12 +34,11 @@
                     <input type="password" id="login-password" placeholder="Password" required class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
                     <button type="submit" id="btn-login" class="w-full bg-indigo-600 text-white font-bold py-3 rounded-lg hover:bg-indigo-700 transition-all">Login</button>
                 </form>
-                <button id="toggle-auth" class="w-full mt-4 text-indigo-600 text-sm hover:underline">New teacher? Registering is handled by admin.</button>
             </div>
 
             <div id="student-join-ui" class="hidden">
                 <h2 class="text-2xl font-bold text-center text-gray-800 mb-2">Join Bingo Game</h2>
-                <div id="auth-status-bar" class="text-xs text-center text-slate-400 mb-4 italic">Connecting to secure session...</div>
+                <div id="auth-status-bar" class="text-xs text-center text-slate-400 mb-4 italic">Establishing secure connection...</div>
                 <form id="student-form" class="space-y-4">
                     <input type="text" id="stu-name" placeholder="Your Name" required class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none">
                     <input type="text" id="stu-code" placeholder="6-Digit Game Code" maxlength="6" required class="w-full p-3 border rounded-lg text-center text-2xl tracking-widest font-mono focus:ring-2 focus:ring-orange-500 outline-none">
@@ -57,6 +57,12 @@
             </div>
             <button id="logout-btn" class="text-red-500 font-bold hover:bg-red-50 px-4 py-2 rounded-lg transition-all">Logout</button>
         </header>
+
+        <!-- Active Sessions Section -->
+        <div id="active-sessions-area" class="mb-8 hidden">
+            <h2 class="text-xl font-bold text-slate-700 mb-4">Active Live Games</h2>
+            <div id="active-sessions-list" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        </div>
 
         <div id="view-collections">
             <div class="flex justify-between items-center mb-6">
@@ -81,11 +87,23 @@
     <!-- Student Bingo Game -->
     <div id="student-game" class="hidden p-4 min-h-screen flex flex-col items-center">
         <div class="w-full max-w-lg">
-            <div class="bg-white p-6 rounded-2xl shadow-xl mb-6 text-center">
-                <h2 class="text-xl font-bold text-gray-800" id="game-title">Bingo Game</h2>
-                <p class="text-indigo-600 font-bold" id="player-display"></p>
+            <div class="bg-white p-6 rounded-2xl shadow-xl mb-6 flex justify-between items-center">
+                <div>
+                    <h2 class="text-xl font-bold text-gray-800" id="game-title">Bingo Game</h2>
+                    <p class="text-indigo-600 font-bold" id="player-display"></p>
+                </div>
+                <button onclick="exitSession()" class="text-slate-400 text-sm hover:text-red-500 font-medium">Exit Game</button>
             </div>
-            <div class="bg-white p-2 rounded-xl shadow-lg border-4 border-indigo-100 mb-6">
+            
+            <div class="bg-white p-4 rounded-xl shadow-lg border-4 border-indigo-100 mb-6">
+                <!-- Bingo Headers B I N G O -->
+                <div class="grid grid-cols-5 gap-1 mb-2">
+                    <div class="bingo-header">B</div>
+                    <div class="bingo-header">I</div>
+                    <div class="bingo-header">N</div>
+                    <div class="bingo-header">G</div>
+                    <div class="bingo-header">O</div>
+                </div>
                 <div id="bingo-card" class="bingo-grid"></div>
             </div>
             <button onclick="checkBingo()" class="w-full py-4 bg-green-500 text-white font-black rounded-2xl text-xl shadow-lg hover:bg-green-600">BINGO!</button>
@@ -137,7 +155,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc, getDocs, deleteDoc, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyCN7gtZAYAPEnO9MSP3ZzogJIWjXaQLaL0",
@@ -158,22 +176,29 @@
         let questionsList = [];
         let activeColId = null;
         let qUnsubscribe = null;
+        let sessionUnsubscribe = null;
+        let authPromise = null;
 
-        // --- MANDATORY AUTH FLOW ---
         const initAuth = async () => {
-            const statusEl = document.getElementById('auth-status-bar');
-            try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                    if (statusEl) statusEl.textContent = "Secure connection active.";
-                } else {
+            if (authPromise) return authPromise;
+            authPromise = (async () => {
+                const statusEl = document.getElementById('auth-status-bar');
+                try {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        try {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                            if (statusEl) statusEl.textContent = "Secure connection active.";
+                            return;
+                        } catch (tokenErr) { console.warn("Token mismatch fallback", tokenErr); }
+                    }
                     await signInAnonymously(auth);
                     if (statusEl) statusEl.textContent = "Guest session active.";
+                } catch (err) {
+                    console.error("Auth Init Error:", err);
+                    if (statusEl) statusEl.textContent = "Offline mode.";
                 }
-            } catch (err) {
-                console.error("Auth Init Error:", err);
-                if (statusEl) statusEl.textContent = "Offline mode active.";
-            }
+            })();
+            return authPromise;
         };
 
         initAuth();
@@ -184,10 +209,11 @@
                 document.getElementById('auth-section').classList.add('hidden');
                 document.getElementById('teacher-dashboard').classList.remove('hidden');
                 loadTeacherData();
+                listenForSessions();
             }
         });
 
-        // --- TAB LOGIC ---
+        // --- TEACHER LOGIC ---
         document.getElementById('tab-teacher').onclick = () => {
             document.getElementById('teacher-auth-ui').classList.remove('hidden');
             document.getElementById('student-join-ui').classList.add('hidden');
@@ -201,7 +227,6 @@
             document.getElementById('tab-teacher').classList.remove('bg-white', 'shadow-sm', 'text-indigo-600');
         };
 
-        // --- TEACHER ACTIONS ---
         document.getElementById('login-form').onsubmit = async (e) => {
             e.preventDefault();
             const btn = document.getElementById('btn-login');
@@ -214,7 +239,10 @@
             }
         };
 
-        document.getElementById('logout-btn').onclick = () => signOut(auth);
+        document.getElementById('logout-btn').onclick = async () => {
+            await signOut(auth);
+            location.reload();
+        };
 
         function loadTeacherData() {
             const colRef = collection(db, 'artifacts', appId, 'users', currentUser.uid, 'collections');
@@ -224,14 +252,48 @@
             });
         }
 
+        function listenForSessions() {
+            const sessRef = collection(db, 'artifacts', appId, 'public', 'data', 'sessions');
+            // RULE 2: Simulating filter in memory
+            onSnapshot(sessRef, (snap) => {
+                const mySessions = snap.docs
+                    .map(d => ({ id: d.id, ...d.data() }))
+                    .filter(s => s.teacherId === currentUser.uid);
+                
+                const area = document.getElementById('active-sessions-area');
+                const list = document.getElementById('active-sessions-list');
+                
+                if (mySessions.length > 0) {
+                    area.classList.remove('hidden');
+                    list.innerHTML = mySessions.map(s => `
+                        <div class="bg-indigo-50 border border-indigo-100 p-4 rounded-xl flex justify-between items-center">
+                            <div>
+                                <span class="text-xs font-bold text-indigo-400 uppercase tracking-wider">Live: ${s.id}</span>
+                                <h3 class="font-bold text-indigo-900">${s.title}</h3>
+                            </div>
+                            <button onclick="destroySession('${s.id}')" class="bg-red-100 text-red-600 p-2 px-3 rounded-lg text-sm font-bold hover:bg-red-200">End Game</button>
+                        </div>
+                    `).join('');
+                } else {
+                    area.classList.add('hidden');
+                }
+            });
+        }
+
+        window.destroySession = async (code) => {
+            if (confirm("End this session? All student progress for this code will be lost.")) {
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'sessions', code));
+            }
+        };
+
         function renderCollections() {
             const grid = document.getElementById('collections-grid');
             grid.innerHTML = collectionsList.map(c => `
-                <div class="bg-white p-6 rounded-2xl border border-slate-200">
-                    <h3 class="text-xl font-bold mb-4">${c.name}</h3>
+                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <h3 class="text-xl font-bold mb-4 text-slate-800">${c.name}</h3>
                     <div class="space-y-2">
-                        <button onclick="launchGame('${c.id}', '${c.name}')" class="w-full bg-orange-500 text-white py-3 rounded-xl font-bold">🚀 Launch Game</button>
-                        <button onclick="enterCollection('${c.id}', '${c.name}')" class="w-full bg-slate-100 py-2 rounded-xl">Edit Questions</button>
+                        <button onclick="launchGame('${c.id}', '${c.name}')" class="w-full bg-orange-500 text-white py-3 rounded-xl font-bold hover:bg-orange-600 transition-colors">🚀 Launch Game</button>
+                        <button onclick="enterCollection('${c.id}', '${c.name}')" class="w-full bg-slate-50 text-slate-600 py-2 rounded-xl hover:bg-slate-100 font-medium">Edit Questions</button>
                     </div>
                 </div>
             `).join('');
@@ -260,8 +322,10 @@
                     <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                         <p class="font-bold text-slate-800 mb-2">${q.text}</p>
                         <div class="grid grid-cols-2 gap-2 text-xs text-slate-500">
-                            <div>A: ${q.optA}</div><div>B: ${q.optB}</div>
-                            <div>C: ${q.optC}</div><div>D: ${q.optD}</div>
+                            <div class="p-1 rounded bg-slate-50">A: ${q.optA}</div>
+                            <div class="p-1 rounded bg-slate-50">B: ${q.optB}</div>
+                            <div class="p-1 rounded bg-slate-50">C: ${q.optC}</div>
+                            <div class="p-1 rounded bg-slate-50">D: ${q.optD}</div>
                         </div>
                     </div>
                 `).join('');
@@ -277,8 +341,6 @@
         };
 
         window.launchGame = async (colId, colName) => {
-            // FIX: Pull all questions from the collection to store in the PUBLIC session
-            // because students can't read the private teacher folder.
             const qSnap = await getDocs(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'collections', colId, 'questions'));
             let allTerms = [];
             qSnap.forEach(doc => {
@@ -295,26 +357,25 @@
                 collectionId: colId, 
                 title: colName, 
                 status: 'active',
-                terms: allTerms // Store terms publicly for the board
+                terms: allTerms 
             });
             document.getElementById('display-game-code').textContent = code;
             document.getElementById('code-modal').classList.replace('hidden', 'flex');
         };
 
-        // --- STUDENT JOIN LOGIC ---
+        // --- STUDENT LOGIC ---
         document.getElementById('student-form').onsubmit = async (e) => {
             e.preventDefault();
             const name = document.getElementById('stu-name').value;
             const code = document.getElementById('stu-code').value;
             const btn = document.getElementById('btn-student-join');
 
-            btn.disabled = true; btn.textContent = "Validating...";
+            btn.disabled = true; btn.textContent = "Joining...";
 
             try {
-                if (!auth.currentUser) await initAuth();
-
+                await initAuth();
                 const sessSnap = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'sessions', code));
-                if (!sessSnap.exists()) throw new Error("Game code not found.");
+                if (!sessSnap.exists()) throw new Error("This game code is no longer active.");
 
                 const data = sessSnap.data();
                 document.getElementById('auth-section').classList.add('hidden');
@@ -322,48 +383,83 @@
                 document.getElementById('game-title').textContent = data.title;
                 document.getElementById('player-display').textContent = `Player: ${name}`;
 
-                // Load board from the PUBLIC terms stored in the session
-                generateBingoBoard(data.terms || []);
+                // Persistence: Check if board exists for this session+name
+                const storageKey = `bingo_board_${code}_${name}`;
+                let savedBoard = localStorage.getItem(storageKey);
+                
+                if (savedBoard) {
+                    renderBoardFromData(JSON.parse(savedBoard));
+                } else {
+                    generateBingoBoard(data.terms || [], storageKey);
+                }
+
+                // Watch session for destruction
+                if (sessionUnsubscribe) sessionUnsubscribe();
+                sessionUnsubscribe = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'sessions', code), (s) => {
+                    if (!s.exists()) {
+                        alert("The teacher has ended this session.");
+                        exitSession();
+                    }
+                });
             } catch (err) {
                 alert(err.message);
                 btn.disabled = false; btn.textContent = "Join Game";
             }
         };
 
-        function generateBingoBoard(pool) {
-            // Fallback if pool is empty
-            if (!pool || pool.length === 0) {
-                for(let i=1; i<=24; i++) pool.push("Term " + i);
-            }
-            
-            // Ensure we have at least 24 unique items
-            while (pool.length < 24) pool.push("Bingo " + (pool.length + 1));
-            
-            const shuffled = pool.sort(() => 0.5 - Math.random()).slice(0, 24);
+        window.exitSession = () => {
+            if (sessionUnsubscribe) sessionUnsubscribe();
+            document.getElementById('student-game').classList.add('hidden');
+            document.getElementById('auth-section').classList.remove('hidden');
+            document.getElementById('btn-student-join').disabled = false;
+            document.getElementById('btn-student-join').textContent = "Join Game";
+        };
+
+        function renderBoardFromData(boardItems) {
             const grid = document.getElementById('bingo-card');
             grid.innerHTML = '';
-            
-            for (let i = 0; i < 25; i++) {
+            boardItems.forEach((item, i) => {
                 const cell = document.createElement('div');
-                cell.className = 'bingo-cell bg-white border rounded-lg p-1 text-[10px] leading-tight font-medium shadow-sm hover:bg-slate-50 transition-colors';
-                if (i === 12) {
+                cell.className = 'bingo-cell bg-white border rounded-lg p-1 text-[10px] leading-tight font-medium shadow-sm hover:bg-slate-50 transition-all';
+                cell.textContent = item;
+                if (item === "FREE" || i === 12) {
                     cell.textContent = "FREE";
                     cell.classList.add('marked', 'free', 'text-indigo-600');
-                } else {
-                    cell.textContent = shuffled.pop();
-                    cell.onclick = () => cell.classList.toggle('marked');
                 }
+                cell.onclick = () => {
+                    cell.classList.toggle('marked');
+                };
                 grid.appendChild(cell);
-            }
+            });
         }
 
-        // Modals / Helpers
+        function generateBingoBoard(pool, storageKey) {
+            let workingPool = [...pool];
+            if (workingPool.length === 0) {
+                for(let i=1; i<=24; i++) workingPool.push("Term " + i);
+            }
+            while (workingPool.length < 24) workingPool.push("Bonus " + (workingPool.length + 1));
+            
+            const shuffled = workingPool.sort(() => 0.5 - Math.random()).slice(0, 24);
+            const boardItems = [];
+            
+            for(let i=0; i<25; i++) {
+                if (i === 12) boardItems.push("FREE");
+                else boardItems.push(shuffled.pop());
+            }
+
+            // Save for persistence
+            localStorage.setItem(storageKey, JSON.stringify(boardItems));
+            renderBoardFromData(boardItems);
+        }
+
+        // Standard Modal/UI Handlers
         window.openColModal = () => document.getElementById('col-modal').classList.replace('hidden', 'flex');
         window.closeColModal = () => document.getElementById('col-modal').classList.replace('flex', 'hidden');
         window.closeCodeModal = () => document.getElementById('code-modal').classList.replace('flex', 'hidden');
         window.openQuestionModal = () => document.getElementById('question-modal').classList.replace('hidden', 'flex');
         window.closeQuestionModal = () => document.getElementById('question-modal').classList.replace('flex', 'hidden');
-        window.checkBingo = () => alert("Bingo verified!");
+        window.checkBingo = () => alert("Submitting Bingo for verification!");
 
         document.getElementById('question-form').onsubmit = async (e) => {
             e.preventDefault();
