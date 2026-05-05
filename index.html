@@ -7,9 +7,9 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .glass-morphism { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
-        .hidden { display: none; }
+        .hidden { display: none !important; }
         .bingo-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
-        .bingo-cell { aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; text-align: center; padding: 4px; font-size: 0.75rem; border: 1px solid #e2e8f0; cursor: pointer; transition: all 0.2s; overflow: hidden; word-break: break-word; }
+        .bingo-cell { aspect-ratio: 1/1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 4px; border: 1px solid #e2e8f0; cursor: pointer; transition: all 0.2s; overflow: hidden; word-break: break-word; }
         .bingo-cell.marked { background-color: #4f46e5; color: white; border-color: #4338ca; }
         .bingo-cell.free { background-color: #f1f5f9; font-weight: bold; }
         .bingo-header { aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 1.25rem; color: #4f46e5; background: #eef2ff; border-radius: 8px; }
@@ -193,8 +193,13 @@
         let qUnsubscribe = null;
         let sessionUnsubscribe = null;
         let authPromise = null;
+
+        // Student Local State Context
         let currentSessionQuestions = [];
         let markedCellsState = [];
+        let assignedQuestions = []; // Maps grid index [0-24] to a specific question index
+        let cellCooldowns = {};     // Maps grid index [0-24] to an unlock timestamp
+        let activeStorageKey, activeMarkedKey, activeQsKey, activeCdKey;
 
         const initAuth = async () => {
             if (authPromise) return authPromise;
@@ -271,7 +276,6 @@
 
         function listenForSessions() {
             const sessRef = collection(db, 'artifacts', appId, 'public', 'data', 'sessions');
-            // RULE 2: Simulating filter in memory
             onSnapshot(sessRef, (snap) => {
                 const mySessions = snap.docs
                     .map(d => ({ id: d.id, ...d.data() }))
@@ -404,16 +408,10 @@
 
                 for (let r of rows) {
                     const c = r.split(',').map(x => x.trim());
-                    // Skip empty rows and ensure enough columns
                     if (c.length >= 6 && c[0] !== '') {
                         try {
                             await addDoc(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'collections', activeColId, 'questions'), {
-                                text: c[0],
-                                optA: c[1],
-                                optB: c[2],
-                                optC: c[3],
-                                optD: c[4],
-                                correct: c[5].toUpperCase()
+                                text: c[0], optA: c[1], optB: c[2], optC: c[3], optD: c[4], correct: c[5].toUpperCase()
                             });
                             importCount++;
                         } catch (err) {
@@ -425,10 +423,8 @@
                 importBtn.textContent = originalText;
                 importBtn.disabled = false;
                 e.target.value = ''; 
-                
                 alert(`Successfully imported ${importCount} questions!`);
             };
-            
             reader.readAsText(file);
         };
 
@@ -452,20 +448,34 @@
                 document.getElementById('game-title').textContent = data.title;
                 document.getElementById('player-display').textContent = `Player: ${name}`;
 
-                // Store session questions globally for the modal
+                // Setup state keys
+                activeStorageKey = `bingo_board_${code}_${name}`;
+                activeMarkedKey  = `bingo_marked_${code}_${name}`;
+                activeQsKey      = `bingo_qs_${code}_${name}`;
+                activeCdKey      = `bingo_cd_${code}_${name}`;
+                
                 currentSessionQuestions = data.questions || [];
 
-                // Persistence: Check if board exists for this session+name
-                const storageKey = `bingo_board_${code}_${name}`;
-                const markedKey = `bingo_marked_${code}_${name}`;
-                
-                let savedBoard = localStorage.getItem(storageKey);
-                markedCellsState = JSON.parse(localStorage.getItem(markedKey)) || [];
-                
-                if (savedBoard) {
-                    renderBoardFromData(JSON.parse(savedBoard), markedKey);
+                // Persistence: Marked cells & Cooldowns
+                markedCellsState = JSON.parse(localStorage.getItem(activeMarkedKey)) || [];
+                cellCooldowns = JSON.parse(localStorage.getItem(activeCdKey)) || {};
+
+                // Persistence: Assigned Questions to specific cells
+                let savedQs = localStorage.getItem(activeQsKey);
+                if (savedQs) {
+                    assignedQuestions = JSON.parse(savedQs);
                 } else {
-                    generateBingoBoard(storageKey, markedKey);
+                    const qLen = Math.max(1, currentSessionQuestions.length);
+                    assignedQuestions = Array.from({length: 25}, () => Math.floor(Math.random() * qLen));
+                    localStorage.setItem(activeQsKey, JSON.stringify(assignedQuestions));
+                }
+
+                // Persistence: The actual Bingo layout (the numbers)
+                let savedBoard = localStorage.getItem(activeStorageKey);
+                if (savedBoard) {
+                    renderBoardFromData(JSON.parse(savedBoard));
+                } else {
+                    generateBingoBoard();
                 }
 
                 // Watch session for destruction
@@ -490,45 +500,59 @@
             document.getElementById('btn-student-join').textContent = "Join Game";
         };
 
-        function renderBoardFromData(boardItems, markedKey) {
+        function renderBoardFromData(boardItems) {
             const grid = document.getElementById('bingo-card');
             grid.innerHTML = '';
             boardItems.forEach((item, i) => {
                 const cell = document.createElement('div');
-                cell.className = 'bingo-cell bg-white border rounded-lg p-1 text-lg leading-tight font-bold shadow-sm hover:bg-slate-50 transition-all';
-                cell.textContent = item;
+                cell.id = `cell-${i}`;
+                cell.className = 'bingo-cell bg-white border rounded-lg p-1 font-bold shadow-sm hover:bg-slate-50 transition-all relative';
+                
+                cell.innerHTML = `<span class="text-xl">${item}</span>`;
                 
                 if (item === "FREE" || i === 12) {
-                    cell.textContent = "FREE";
-                    cell.classList.add('marked', 'free', 'text-indigo-600', 'text-sm');
-                    cell.classList.remove('text-lg');
-                } else if (markedCellsState.includes(i)) {
+                    cell.innerHTML = `<span class="text-sm">FREE</span>`;
+                    cell.classList.add('marked', 'free', 'text-indigo-600');
+                } 
+                else if (markedCellsState.includes(i)) {
                     cell.classList.add('marked');
+                } 
+                else if (cellCooldowns[i] && cellCooldowns[i] > Date.now()) {
+                    // Lock cell visually for cooldown
+                    cell.classList.add('opacity-60', 'cursor-not-allowed', 'bg-red-50');
+                    cell.classList.remove('bg-white', 'hover:bg-slate-50');
+                    const remaining = Math.ceil((cellCooldowns[i] - Date.now()) / 1000);
+                    cell.innerHTML += `<div class="cd-timer text-[11px] text-red-600 font-black mt-1">Wait ${remaining}s</div>`;
                 }
-                
+
                 cell.onclick = () => {
-                    if (item === "FREE" || i === 12) return; // Free space is always marked
+                    if (item === "FREE" || i === 12) return; 
+                    
+                    // Disallow click if on cooldown
+                    if (cellCooldowns[i] && cellCooldowns[i] > Date.now()) return;
                     
                     if (cell.classList.contains('marked')) {
                         // Allow unmarking
                         cell.classList.remove('marked');
                         markedCellsState = markedCellsState.filter(idx => idx !== i);
-                        localStorage.setItem(markedKey, JSON.stringify(markedCellsState));
+                        localStorage.setItem(activeMarkedKey, JSON.stringify(markedCellsState));
                     } else {
-                        // Unmarked cell clicked -> Show random question
-                        presentQuestion(cell, i, markedKey);
+                        presentQuestion(cell, i);
                     }
                 };
                 grid.appendChild(cell);
             });
         }
 
-        function presentQuestion(cell, index, markedKey) {
+        function presentQuestion(cell, index) {
             if (currentSessionQuestions.length === 0) {
                 alert("No questions available in this session!");
                 return;
             }
-            const q = currentSessionQuestions[Math.floor(Math.random() * currentSessionQuestions.length)];
+            
+            // Retrieve pre-assigned question for this cell
+            const qIndex = assignedQuestions[index] || 0;
+            const q = currentSessionQuestions[qIndex];
             
             document.getElementById('sq-text').textContent = q.text;
             const optionsDiv = document.getElementById('sq-options');
@@ -540,16 +564,35 @@
                 const btn = document.createElement('button');
                 btn.className = "w-full p-4 text-left border-2 border-slate-200 rounded-xl font-medium hover:border-indigo-500 hover:bg-indigo-50 transition-all";
                 btn.textContent = `${letter}: ${optText}`;
+                
                 btn.onclick = () => {
                     if (letter === q.correct) {
                         cell.classList.add('marked');
                         if (!markedCellsState.includes(index)) {
                             markedCellsState.push(index);
-                            localStorage.setItem(markedKey, JSON.stringify(markedCellsState));
+                            localStorage.setItem(activeMarkedKey, JSON.stringify(markedCellsState));
                         }
+                        
+                        // Re-render board cleanly
+                        const savedBoard = localStorage.getItem(activeStorageKey);
+                        if (savedBoard) renderBoardFromData(JSON.parse(savedBoard));
+                        
                         closeStudentQuestionModal();
                     } else {
-                        alert("Incorrect! You cannot mark this square yet.");
+                        // WRONG ANSWER Logic
+                        alert("Incorrect! This square is locked for 10 seconds.");
+                        
+                        // Assign a completely new random question to this cell for when it unlocks
+                        assignedQuestions[index] = Math.floor(Math.random() * currentSessionQuestions.length);
+                        localStorage.setItem(activeQsKey, JSON.stringify(assignedQuestions));
+                        
+                        // Set 10s cooldown
+                        cellCooldowns[index] = Date.now() + 10000;
+                        localStorage.setItem(activeCdKey, JSON.stringify(cellCooldowns));
+                        
+                        const savedBoard = localStorage.getItem(activeStorageKey);
+                        if (savedBoard) renderBoardFromData(JSON.parse(savedBoard));
+                        
                         closeStudentQuestionModal();
                     }
                 };
@@ -563,15 +606,13 @@
             document.getElementById('student-question-modal').classList.replace('flex', 'hidden');
         };
 
-        function generateBingoBoard(storageKey, markedKey) {
-            // Helper to get random unique numbers in a range
+        function generateBingoBoard() {
             const getNumbers = (min, max, count) => {
                 const nums = [];
                 for (let i = min; i <= max; i++) nums.push(i);
                 return nums.sort(() => 0.5 - Math.random()).slice(0, count);
             };
 
-            // Standard Bingo ranges
             const b = getNumbers(1, 15, 5);
             const i_col = getNumbers(16, 30, 5);
             const n = getNumbers(31, 45, 5);
@@ -579,26 +620,44 @@
             const o = getNumbers(61, 75, 5);
 
             const boardItems = [];
-            
-            // Build the card row by row for CSS Grid (5 columns)
             for (let row = 0; row < 5; row++) {
-                boardItems.push(b[row]);
-                boardItems.push(i_col[row]);
-                
-                if (row === 2) {
-                    boardItems.push("FREE");
-                } else {
-                    boardItems.push(n[row]);
-                }
-                
-                boardItems.push(g[row]);
-                boardItems.push(o[row]);
+                boardItems.push(b[row], i_col[row]);
+                if (row === 2) boardItems.push("FREE");
+                else boardItems.push(n[row]);
+                boardItems.push(g[row], o[row]);
             }
 
-            // Save for persistence
-            localStorage.setItem(storageKey, JSON.stringify(boardItems));
-            renderBoardFromData(boardItems, markedKey);
+            localStorage.setItem(activeStorageKey, JSON.stringify(boardItems));
+            renderBoardFromData(boardItems);
         }
+
+        // --- GLOBAL COOLDOWN INTERVAL ---
+        // Checks every second to update the visual countdowns on locked cells
+        setInterval(() => {
+            if (!activeCdKey) return; 
+            const now = Date.now();
+            let needsRender = false;
+            
+            Object.keys(cellCooldowns).forEach(idx => {
+                if (cellCooldowns[idx] && cellCooldowns[idx] <= now) {
+                    delete cellCooldowns[idx];
+                    needsRender = true;
+                } else if (cellCooldowns[idx]) {
+                    const el = document.getElementById(`cell-${idx}`);
+                    if (el) {
+                        const timerSpan = el.querySelector('.cd-timer');
+                        const remaining = Math.ceil((cellCooldowns[idx] - now) / 1000);
+                        if (timerSpan) timerSpan.textContent = `Wait ${remaining}s`;
+                    }
+                }
+            });
+            
+            if (needsRender) {
+                localStorage.setItem(activeCdKey, JSON.stringify(cellCooldowns));
+                const savedBoard = localStorage.getItem(activeStorageKey);
+                if (savedBoard) renderBoardFromData(JSON.parse(savedBoard));
+            }
+        }, 1000);
 
         // Standard Modal/UI Handlers
         window.openColModal = () => document.getElementById('col-modal').classList.replace('hidden', 'flex');
