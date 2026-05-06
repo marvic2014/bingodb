@@ -108,7 +108,7 @@
                 </div>
             </div>
 
-            <!-- NEW: Extra Card Code Manager -->
+            <!-- Extra Card Code Manager -->
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mt-6">
                 <div class="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
                     <div>
@@ -187,7 +187,7 @@
 
     <!-- Modals -->
     
-    <!-- NEW: Game Launch Setup Modal -->
+    <!-- Game Launch Setup Modal -->
     <div id="launch-modal" class="fixed inset-0 bg-black/80 hidden items-center justify-center p-4 z-50">
         <div class="bg-white p-8 rounded-3xl w-full max-w-sm shadow-2xl">
             <h2 class="text-2xl font-bold text-slate-800 mb-2">Game Settings</h2>
@@ -231,7 +231,7 @@
         </div>
     </div>
 
-    <!-- NEW: Extra Card Entry Modal -->
+    <!-- Extra Card Entry Modal -->
     <div id="extra-card-modal" class="fixed inset-0 bg-black/80 hidden items-center justify-center p-4 z-[140]">
         <div class="bg-white p-8 rounded-3xl w-full max-w-sm shadow-2xl text-center">
             <h2 class="text-2xl font-bold text-slate-800 mb-2">Redeem Extra Card</h2>
@@ -596,18 +596,34 @@
                     });
                 }
 
-                // Render Extra Card Codes with REVOKE button
+                // Render Extra Card Codes with Used Status and REVOKE button
                 const codes = data.extraCardCodes || [];
                 const codeContainer = document.getElementById('teacher-extra-codes');
                 if (codes.length === 0) {
                     codeContainer.innerHTML = '<span class="text-slate-400 italic text-sm">No active codes.</span>';
                 } else {
-                    codeContainer.innerHTML = codes.map(c => `
-                        <div class="inline-flex items-center bg-indigo-100 text-indigo-800 rounded-lg border border-indigo-200 shadow-sm overflow-hidden">
-                            <span class="px-3 py-1.5 font-mono font-bold tracking-wider">${c}</span>
-                            <button onclick="revokeExtraCode('${c}')" class="bg-indigo-200 hover:bg-red-500 hover:text-white px-2 py-1.5 font-bold transition-colors" title="Revoke Code">✕</button>
-                        </div>
-                    `).join('');
+                    codeContainer.innerHTML = codes.map(c => {
+                        // Supports new object structure {code, usedBy} or legacy string structure
+                        const codeStr = c.code || c; 
+                        const usedBy = c.usedBy || null;
+
+                        if (usedBy) {
+                            return `
+                                <div class="inline-flex items-center bg-slate-100 text-slate-500 rounded-lg border border-slate-200 shadow-sm overflow-hidden opacity-80">
+                                    <span class="px-3 py-1.5 font-mono font-bold tracking-wider line-through">${codeStr}</span>
+                                    <span class="px-3 py-1.5 text-xs font-bold bg-slate-200 text-slate-600 border-l border-slate-300">Used by: ${usedBy}</span>
+                                    <button onclick="revokeExtraCode('${codeStr}')" class="bg-slate-200 hover:bg-red-500 hover:text-white px-2 py-1.5 font-bold transition-colors" title="Remove from list">✕</button>
+                                </div>
+                            `;
+                        } else {
+                            return `
+                                <div class="inline-flex items-center bg-indigo-100 text-indigo-800 rounded-lg border border-indigo-200 shadow-sm overflow-hidden">
+                                    <span class="px-3 py-1.5 font-mono font-bold tracking-wider">${codeStr}</span>
+                                    <button onclick="revokeExtraCode('${codeStr}')" class="bg-indigo-200 hover:bg-red-500 hover:text-white px-2 py-1.5 font-bold transition-colors" title="Revoke Code">✕</button>
+                                </div>
+                            `;
+                        }
+                    }).join('');
                 }
             });
         };
@@ -667,7 +683,8 @@
                 if (snap.exists()) {
                     const data = snap.data();
                     const codes = data.extraCardCodes || [];
-                    codes.push(newCode);
+                    // Push new code with unassigned "usedBy" status
+                    codes.push({ code: newCode, usedBy: null });
                     await updateDoc(ref, { extraCardCodes: codes });
                 }
             } catch (err) {
@@ -676,7 +693,7 @@
             }
         };
 
-        // NEW: Teacher can manually revoke the code so no one else uses it
+        // Teacher can manually revoke the code or remove a used code from the UI
         window.revokeExtraCode = async (codeToRemove) => {
             if (!activeLiveSessionCode) return;
             try {
@@ -685,7 +702,10 @@
                 if (snap.exists()) {
                     const data = snap.data();
                     const codes = data.extraCardCodes || [];
-                    const newCodes = codes.filter(c => c !== codeToRemove);
+                    
+                    // Filter out the code (handles both the new object structure and old string structure)
+                    const newCodes = codes.filter(c => (c.code || c) !== codeToRemove);
+                    
                     await updateDoc(ref, { extraCardCodes: newCodes });
                 }
             } catch (err) {
@@ -907,8 +927,9 @@
             if (!inputCode) return;
             if (!activeStudentSessionId) return;
             
+            const stuName = document.getElementById('stu-name').value || 'Unknown Player';
+            
             // Check local usage to prevent the same student from spamming the code
-            const stuName = document.getElementById('stu-name').value;
             const localUsedKey = `bingo_used_codes_${activeStudentSessionId}_${stuName}`;
             const usedCodes = JSON.parse(localStorage.getItem(localUsedKey)) || [];
             
@@ -925,19 +946,28 @@
                 const data = snap.data();
                 const codes = data.extraCardCodes || [];
                 
-                const codeIndex = codes.indexOf(inputCode);
+                // Find matching code string OR object
+                const codeIndex = codes.findIndex(c => (c.code || c) === inputCode);
+                
                 if (codeIndex === -1) {
                     alert("Invalid code! Please check with your teacher.");
                     return;
                 }
                 
-                // Try to remove code from DB so it can't be used by others
+                // Check if the code was already marked 'used' by someone else on the server
+                if (codes[codeIndex].usedBy) {
+                    alert(`This code has already been redeemed by ${codes[codeIndex].usedBy}!`);
+                    return;
+                }
+                
+                // Try to update code in DB to 'used' status with the student's name
                 try {
                     const newCodes = [...codes];
-                    newCodes.splice(codeIndex, 1);
+                    // Replace string or old object with the new Used object
+                    newCodes[codeIndex] = { code: inputCode, usedBy: stuName };
                     await updateDoc(ref, { extraCardCodes: newCodes });
                 } catch (updateErr) {
-                    console.warn("Could not remove code from server due to permissions. Relying on local validation.", updateErr);
+                    console.warn("Could not mark code as used on server due to permissions. Relying on local validation.", updateErr);
                 }
                 
                 // Mark code as used locally
