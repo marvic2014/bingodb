@@ -187,6 +187,18 @@
         </div>
     </div>
 
+    <!-- NEW: Student Reset Choice Modal -->
+    <div id="student-reset-modal" class="fixed inset-0 bg-black/90 hidden items-center justify-center p-4 z-[130]">
+        <div class="bg-white p-8 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col text-center">
+            <h3 class="text-xl font-bold text-slate-800 mb-4">Game Reset!</h3>
+            <p class="text-slate-600 mb-6">The teacher has reset the game. Would you like a new Bingo card or keep your current numbers?</p>
+            <div class="flex gap-2">
+                <button onclick="handleResetChoice('new')" class="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all">New Card</button>
+                <button onclick="handleResetChoice('keep')" class="flex-1 bg-slate-100 text-slate-700 py-3 rounded-xl font-bold hover:bg-slate-200 transition-all">Keep Card</button>
+            </div>
+        </div>
+    </div>
+
     <div id="code-modal" class="fixed inset-0 bg-black/80 hidden items-center justify-center p-4 z-[100]">
         <div class="bg-white p-8 rounded-3xl w-full max-w-md shadow-2xl text-center">
             <h2 class="text-2xl font-bold text-slate-800 mb-2">Game is Live!</h2>
@@ -267,7 +279,8 @@
         let markedCellsState = {}; // Changed to Object for Timestamps
         let assignedQuestions = []; // Maps grid index [0-24] to a specific question index
         let cellCooldowns = {};     // Maps grid index [0-24] to an unlock timestamp
-        let activeStorageKey, activeMarkedKey, activeCdKey, activeQsKey;
+        let activeStorageKey, activeMarkedKey, activeCdKey, activeQsKey, activeResetKey;
+        let pendingResetTimestamp = null;
 
         const initAuth = async () => {
             if (authPromise) return authPromise;
@@ -683,11 +696,11 @@
                 activeMarkedKey  = `bingo_marked_${code}_${name}`;
                 activeCdKey      = `bingo_cd_${code}_${name}`;
                 activeQsKey      = `bingo_qs_${code}_${name}`;
+                activeResetKey   = `bingo_reset_${code}_${name}`;
                 
                 // FIX: Prevent false "reset" alert when first joining
-                const localResetKey = `bingo_reset_${code}_${name}`;
-                if (!localStorage.getItem(localResetKey) && data.lastReset) {
-                    localStorage.setItem(localResetKey, data.lastReset.toString());
+                if (!localStorage.getItem(activeResetKey) && data.lastReset) {
+                    localStorage.setItem(activeResetKey, data.lastReset.toString());
                 }
                 
                 currentSessionMode = data.mode || 'quiz';
@@ -733,22 +746,11 @@
                     
                     const sessionData = s.data();
                     
-                    // Handle Teacher Reset
-                    const localReset = localStorage.getItem(localResetKey);
+                    // Handle Teacher Reset - Show Choice Modal
+                    const localReset = localStorage.getItem(activeResetKey);
                     if (sessionData.lastReset && (!localReset || parseInt(localReset) < sessionData.lastReset)) {
-                        alert("The teacher has reset the game. Your board is being cleared.");
-                        localStorage.setItem(localResetKey, sessionData.lastReset.toString());
-                        
-                        markedCellsState = {};
-                        cellCooldowns = {};
-                        assignedQuestions = [];
-                        
-                        localStorage.removeItem(activeMarkedKey);
-                        localStorage.removeItem(activeCdKey);
-                        localStorage.removeItem(activeStorageKey);
-                        localStorage.removeItem(activeQsKey);
-                        
-                        generateBingoBoard();
+                        pendingResetTimestamp = sessionData.lastReset;
+                        document.getElementById('student-reset-modal').classList.replace('hidden', 'flex');
                     }
                     
                     // Update Student Drawn Numbers UI
@@ -781,6 +783,39 @@
             document.getElementById('auth-section').classList.remove('hidden');
             document.getElementById('btn-student-join').disabled = false;
             document.getElementById('btn-student-join').textContent = "Join Game";
+        };
+
+        window.handleResetChoice = (choice) => {
+            document.getElementById('student-reset-modal').classList.replace('flex', 'hidden');
+            
+            if (pendingResetTimestamp) {
+                localStorage.setItem(activeResetKey, pendingResetTimestamp.toString());
+                pendingResetTimestamp = null;
+            }
+
+            // Always clear previous marks and cooldowns for the new round
+            markedCellsState = {};
+            cellCooldowns = {};
+            localStorage.removeItem(activeMarkedKey);
+            localStorage.removeItem(activeCdKey);
+            
+            // Re-assign random questions to squares to keep it fresh
+            const qLen = Math.max(1, currentSessionQuestions.length);
+            assignedQuestions = Array.from({length: 25}, () => Math.floor(Math.random() * qLen));
+            localStorage.setItem(activeQsKey, JSON.stringify(assignedQuestions));
+
+            if (choice === 'new') {
+                localStorage.removeItem(activeStorageKey);
+                generateBingoBoard();
+            } else {
+                // Keep the exact same numbers, but re-render to clear marks
+                const savedBoard = localStorage.getItem(activeStorageKey);
+                if (savedBoard) {
+                    renderBoardFromData(JSON.parse(savedBoard));
+                } else {
+                    generateBingoBoard();
+                }
+            }
         };
 
         function renderBoardFromData(boardItems) {
