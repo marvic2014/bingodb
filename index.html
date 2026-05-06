@@ -83,9 +83,18 @@
             </div>
 
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                <h3 class="font-bold text-gray-700 mb-4">Drawn Numbers</h3>
-                <div id="teacher-drawn-list" class="flex flex-wrap gap-2">
-                    <!-- Numbers will go here -->
+                <div class="flex flex-col md:flex-row gap-6">
+                    <div class="flex-shrink-0 text-center bg-indigo-50 p-6 rounded-xl border border-indigo-100 flex flex-col justify-center min-w-[150px]">
+                        <span class="text-sm font-bold text-indigo-400 uppercase tracking-widest mb-2">Latest Draw</span>
+                        <div id="teacher-latest-draw" class="text-6xl font-black text-indigo-700">--</div>
+                    </div>
+                    <div class="flex-grow grid grid-cols-5 gap-2 text-center">
+                        <div><div class="font-black text-lg bg-indigo-100 text-indigo-800 rounded-md py-1 mb-2">B</div><div id="t-drawn-b" class="flex flex-col gap-1 max-h-48 overflow-y-auto"></div></div>
+                        <div><div class="font-black text-lg bg-indigo-100 text-indigo-800 rounded-md py-1 mb-2">I</div><div id="t-drawn-i" class="flex flex-col gap-1 max-h-48 overflow-y-auto"></div></div>
+                        <div><div class="font-black text-lg bg-indigo-100 text-indigo-800 rounded-md py-1 mb-2">N</div><div id="t-drawn-n" class="flex flex-col gap-1 max-h-48 overflow-y-auto"></div></div>
+                        <div><div class="font-black text-lg bg-indigo-100 text-indigo-800 rounded-md py-1 mb-2">G</div><div id="t-drawn-g" class="flex flex-col gap-1 max-h-48 overflow-y-auto"></div></div>
+                        <div><div class="font-black text-lg bg-indigo-100 text-indigo-800 rounded-md py-1 mb-2">O</div><div id="t-drawn-o" class="flex flex-col gap-1 max-h-48 overflow-y-auto"></div></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -126,10 +135,17 @@
             </div>
             
             <!-- NEW: Student's view of Drawn Numbers -->
-            <div class="bg-white p-4 rounded-xl shadow-lg border-2 border-indigo-50 mb-6">
-                <h3 class="text-sm font-bold text-slate-500 mb-2 uppercase tracking-wider">Teacher's Draws</h3>
-                <div id="student-drawn-list" class="flex flex-wrap gap-2 max-h-24 overflow-y-auto">
-                    <span class="text-slate-400 text-sm italic">Waiting for numbers...</span>
+            <div class="bg-white p-4 rounded-xl shadow-lg border-2 border-indigo-50 mb-6 flex gap-4 items-center">
+                <div class="text-center bg-indigo-50 p-4 rounded-xl border border-indigo-100 min-w-[100px]">
+                    <div class="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-1">Latest Draw</div>
+                    <div id="student-latest-draw" class="text-4xl font-black text-indigo-700">--</div>
+                </div>
+                <div class="flex-grow grid grid-cols-5 gap-1 text-center text-xs h-28 overflow-y-auto pr-1">
+                    <div><div class="font-bold bg-slate-100 rounded mb-1 py-1">B</div><div id="s-drawn-b" class="flex flex-col gap-1"></div></div>
+                    <div><div class="font-bold bg-slate-100 rounded mb-1 py-1">I</div><div id="s-drawn-i" class="flex flex-col gap-1"></div></div>
+                    <div><div class="font-bold bg-slate-100 rounded mb-1 py-1">N</div><div id="s-drawn-n" class="flex flex-col gap-1"></div></div>
+                    <div><div class="font-bold bg-slate-100 rounded mb-1 py-1">G</div><div id="s-drawn-g" class="flex flex-col gap-1"></div></div>
+                    <div><div class="font-bold bg-slate-100 rounded mb-1 py-1">O</div><div id="s-drawn-o" class="flex flex-col gap-1"></div></div>
                 </div>
             </div>
 
@@ -443,26 +459,21 @@
                 }
                 const data = snap.data();
                 const drawn = data.drawnNumbers || [];
-                const list = document.getElementById('teacher-drawn-list');
+                
+                ['b', 'i', 'n', 'g', 'o'].forEach(l => document.getElementById(`t-drawn-${l}`).innerHTML = '');
                 
                 if (drawn.length === 0) {
-                    list.innerHTML = '<span class="text-slate-400 italic">No numbers drawn yet.</span>';
+                    document.getElementById('teacher-latest-draw').textContent = '--';
                 } else {
-                    // Sort drawn numbers by B-I-N-G-O, then numerically
-                    const letterOrder = { 'B': 1, 'I': 2, 'N': 3, 'G': 4, 'O': 5 };
-                    const sortedDrawn = [...drawn].sort((a, b) => {
-                        if (letterOrder[a.letter] !== letterOrder[b.letter]) {
-                            return letterOrder[a.letter] - letterOrder[b.letter];
-                        }
-                        return a.num - b.num;
+                    const latest = drawn[drawn.length - 1];
+                    document.getElementById('teacher-latest-draw').textContent = `${latest.letter}-${latest.num}`;
+                    
+                    // Sorting by num automatically handles the ascending order within each specific column
+                    const sortedDrawn = [...drawn].sort((a, b) => a.num - b.num);
+                    sortedDrawn.forEach(d => {
+                        const col = document.getElementById(`t-drawn-${d.letter.toLowerCase()}`);
+                        col.innerHTML += `<div class="bg-indigo-50 rounded text-sm py-1 font-bold text-indigo-900 border border-indigo-100 shadow-sm">${d.num}</div>`;
                     });
-
-                    list.innerHTML = sortedDrawn.map(d => `
-                        <div class="bg-indigo-50 border border-indigo-200 p-2 rounded-lg text-center min-w-[4rem]">
-                            <div class="font-black text-indigo-700 text-lg">${d.letter}-${d.num}</div>
-                            <div class="text-[10px] text-slate-500">${d.time}</div>
-                        </div>
-                    `).join('');
                 }
             });
         };
@@ -658,25 +669,21 @@
                     }
                     
                     // Update Student Drawn Numbers UI
-                    const drawnList = document.getElementById('student-drawn-list');
                     const drawn = sessionData.drawnNumbers || [];
+                    
+                    ['b', 'i', 'n', 'g', 'o'].forEach(l => document.getElementById(`s-drawn-${l}`).innerHTML = '');
+                    
                     if (drawn.length === 0) {
-                        drawnList.innerHTML = '<span class="text-slate-400 text-sm italic">Waiting for numbers...</span>';
+                        document.getElementById('student-latest-draw').textContent = '--';
                     } else {
-                        // Sort drawn numbers by B-I-N-G-O, then numerically
-                        const letterOrder = { 'B': 1, 'I': 2, 'N': 3, 'G': 4, 'O': 5 };
-                        const sortedDrawn = [...drawn].sort((a, b) => {
-                            if (letterOrder[a.letter] !== letterOrder[b.letter]) {
-                                return letterOrder[a.letter] - letterOrder[b.letter];
-                            }
-                            return a.num - b.num;
-                        });
+                        const latest = drawn[drawn.length - 1];
+                        document.getElementById('student-latest-draw').textContent = `${latest.letter}-${latest.num}`;
 
-                        drawnList.innerHTML = sortedDrawn.map(d => `
-                            <div class="bg-indigo-600 text-white px-2 py-1 rounded text-xs font-bold shadow-sm">
-                                ${d.letter}-${d.num}
-                            </div>
-                        `).join('');
+                        const sortedDrawn = [...drawn].sort((a, b) => a.num - b.num);
+                        sortedDrawn.forEach(d => {
+                            const col = document.getElementById(`s-drawn-${d.letter.toLowerCase()}`);
+                            col.innerHTML += `<div class="bg-indigo-100 rounded font-bold text-indigo-800 p-1 shadow-sm">${d.num}</div>`;
+                        });
                     }
                 });
             } catch (err) {
