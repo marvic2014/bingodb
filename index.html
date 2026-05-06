@@ -64,7 +64,7 @@
                 <h2 class="text-2xl font-bold mb-1">Classic Bingo</h2>
                 <p class="text-indigo-100 text-sm">Host a standard game without questions. Just draw numbers and let students mark their cards freely.</p>
             </div>
-            <button onclick="launchRegularGame()" class="bg-white text-indigo-600 px-6 py-3 rounded-xl font-bold shadow-md hover:bg-slate-50 transition-all whitespace-nowrap">Host Classic Game</button>
+            <button onclick="prepareLaunch('regular')" class="bg-white text-indigo-600 px-6 py-3 rounded-xl font-bold shadow-md hover:bg-slate-50 transition-all whitespace-nowrap">Host Classic Game</button>
         </div>
 
         <!-- Active Sessions Section -->
@@ -73,7 +73,7 @@
             <div id="active-sessions-list" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
         </div>
 
-        <!-- NEW: Manage Live Session View -->
+        <!-- Manage Live Session View -->
         <div id="view-manage-session" class="hidden">
             <div class="flex items-center gap-4 mb-6">
                 <button onclick="backToDashboardFromSession()" class="text-indigo-600 font-bold hover:underline">← Back</button>
@@ -88,7 +88,6 @@
                 <div class="flex gap-2">
                     <button onclick="drawNumber()" class="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold shadow-md hover:bg-indigo-700">Draw Number</button>
                     <button onclick="resetSession()" class="bg-orange-500 text-white px-4 py-2 rounded-lg font-bold shadow-md hover:bg-orange-600">Reset Game</button>
-                    <!-- FIX: Removed the invalid parameter inside destroySession() -->
                     <button onclick="destroySession()" class="bg-red-500 text-white px-4 py-2 rounded-lg font-bold shadow-md hover:bg-red-600">End Game</button>
                 </div>
             </div>
@@ -137,7 +136,7 @@
     <!-- Student Bingo Game -->
     <div id="student-game" class="hidden p-4 min-h-screen flex flex-col items-center">
         <div class="w-full max-w-lg">
-            <div class="bg-white p-6 rounded-2xl shadow-xl mb-6 flex justify-between items-center">
+            <div class="bg-white p-6 rounded-2xl shadow-xl mb-6 flex justify-between items-center sticky top-4 z-40">
                 <div>
                     <h2 class="text-xl font-bold text-gray-800" id="game-title">Bingo Game</h2>
                     <p class="text-indigo-600 font-bold" id="player-display"></p>
@@ -145,7 +144,7 @@
                 <button onclick="exitSession()" class="text-slate-400 text-sm hover:text-red-500 font-medium">Exit Game</button>
             </div>
             
-            <!-- NEW: Student's view of Drawn Numbers -->
+            <!-- Student's view of Drawn Numbers -->
             <div class="bg-white p-4 rounded-xl shadow-lg border-2 border-indigo-50 mb-6 flex gap-4 items-center">
                 <div class="text-center bg-indigo-50 p-4 rounded-xl border border-indigo-100 min-w-[100px]">
                     <div class="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-1">Latest Draw</div>
@@ -160,22 +159,38 @@
                 </div>
             </div>
 
-            <div class="bg-white p-4 rounded-xl shadow-lg border-4 border-indigo-100 mb-6">
-                <!-- Bingo Headers B I N G O -->
-                <div class="grid grid-cols-5 gap-1 mb-2">
-                    <div class="bingo-header">B</div>
-                    <div class="bingo-header">I</div>
-                    <div class="bingo-header">N</div>
-                    <div class="bingo-header">G</div>
-                    <div class="bingo-header">O</div>
-                </div>
-                <div id="bingo-card" class="bingo-grid"></div>
+            <!-- Bingo Cards Container -->
+            <div id="bingo-cards-container" class="flex flex-col gap-8 w-full max-w-lg mb-6">
+                <!-- JS will inject dynamic boards here -->
             </div>
+            
             <button onclick="checkBingo()" class="w-full py-4 bg-green-500 text-white font-black rounded-2xl text-xl shadow-lg hover:bg-green-600">BINGO!</button>
         </div>
     </div>
 
     <!-- Modals -->
+    
+    <!-- NEW: Game Launch Setup Modal -->
+    <div id="launch-modal" class="fixed inset-0 bg-black/80 hidden items-center justify-center p-4 z-50">
+        <div class="bg-white p-8 rounded-3xl w-full max-w-sm shadow-2xl">
+            <h2 class="text-2xl font-bold text-slate-800 mb-2">Game Settings</h2>
+            <p class="text-slate-500 text-sm mb-6">Configure the game before launching.</p>
+            
+            <label class="block font-bold text-gray-700 mb-2">Cards Per Player</label>
+            <select id="launch-cards-count" class="w-full p-3 border border-slate-300 rounded-lg mb-8 outline-none focus:ring-2 focus:ring-indigo-500">
+                <option value="1">1 Card</option>
+                <option value="2">2 Cards</option>
+                <option value="3">3 Cards</option>
+                <option value="4">4 Cards</option>
+            </select>
+            
+            <div class="flex gap-2">
+                <button onclick="confirmLaunch()" class="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all">Launch Game!</button>
+                <button onclick="closeLaunchModal()" class="flex-1 bg-slate-100 text-slate-600 py-3 rounded-xl font-bold hover:bg-slate-200 transition-all">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Student Question Modal -->
     <div id="student-question-modal" class="fixed inset-0 bg-black/90 hidden items-center justify-center p-4 z-[120]">
         <div class="bg-white p-8 rounded-3xl w-full max-w-lg shadow-2xl flex flex-col">
@@ -187,14 +202,14 @@
         </div>
     </div>
 
-    <!-- NEW: Student Reset Choice Modal -->
+    <!-- Student Reset Choice Modal -->
     <div id="student-reset-modal" class="fixed inset-0 bg-black/90 hidden items-center justify-center p-4 z-[130]">
         <div class="bg-white p-8 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col text-center">
             <h3 class="text-xl font-bold text-slate-800 mb-4">Game Reset!</h3>
             <p class="text-slate-600 mb-6">The teacher has reset the game. Would you like a new Bingo card or keep your current numbers?</p>
             <div class="flex gap-2">
-                <button onclick="handleResetChoice('new')" class="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all">New Card</button>
-                <button onclick="handleResetChoice('keep')" class="flex-1 bg-slate-100 text-slate-700 py-3 rounded-xl font-bold hover:bg-slate-200 transition-all">Keep Card</button>
+                <button onclick="handleResetChoice('new')" class="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all">New Card(s)</button>
+                <button onclick="handleResetChoice('keep')" class="flex-1 bg-slate-100 text-slate-700 py-3 rounded-xl font-bold hover:bg-slate-200 transition-all">Keep Card(s)</button>
             </div>
         </div>
     </div>
@@ -272,13 +287,15 @@
         // Teacher Live Session State
         let activeLiveSessionCode = null;
         let manageSessionUnsub = null;
+        let pendingLaunchData = {}; // Stores mode/colId for the launch modal
 
         // Student Local State Context
         let currentSessionQuestions = [];
         let currentSessionMode = 'quiz'; // 'quiz' or 'regular'
-        let markedCellsState = {}; // Changed to Object for Timestamps
-        let assignedQuestions = []; // Maps grid index [0-24] to a specific question index
-        let cellCooldowns = {};     // Maps grid index [0-24] to an unlock timestamp
+        let currentCardsPerPlayer = 1;
+        let markedCellsState = {}; // Object for Timestamps keyed by "cardIdx_cellIdx"
+        let assignedQuestions = []; // 2D array: assignedQuestions[cardIdx][cellIdx] = qIndex
+        let cellCooldowns = {};     // Maps grid index "cardIdx_cellIdx" to an unlock timestamp
         let activeStorageKey, activeMarkedKey, activeCdKey, activeQsKey, activeResetKey;
         let pendingResetTimestamp = null;
 
@@ -370,7 +387,7 @@
             onSnapshot(sessRef, (snap) => {
                 const mySessions = snap.docs
                     .map(d => ({ id: d.id, ...d.data() }))
-                    // FIX: Only show active sessions (filters out soft-deleted games)
+                    // Only show active sessions (filters out soft-deleted games)
                     .filter(s => s.teacherId === currentUser.uid && s.status === 'active');
                 
                 const area = document.getElementById('active-sessions-area');
@@ -379,10 +396,11 @@
                 if (mySessions.length > 0) {
                     area.classList.remove('hidden');
                     list.innerHTML = mySessions.map(s => `
-                        <div class="bg-indigo-50 border border-indigo-100 p-4 rounded-xl flex justify-between items-center">
+                        <div id="session-card-${s.id}" class="bg-indigo-50 border border-indigo-100 p-4 rounded-xl flex justify-between items-center">
                             <div>
                                 <span class="text-xs font-bold text-indigo-400 uppercase tracking-wider">Live: ${s.id} <span class="ml-1 px-2 py-0.5 rounded bg-indigo-200 text-indigo-700">${s.mode === 'regular' ? 'Classic' : 'Quiz'}</span></span>
                                 <h3 class="font-bold text-indigo-900">${s.title}</h3>
+                                <div class="text-[10px] text-indigo-400 mt-1">${s.cardsPerPlayer || 1} Card(s) per Player</div>
                             </div>
                             <div class="flex gap-2">
                                 <button onclick="manageLiveSession('${s.id}')" class="bg-indigo-600 text-white p-2 px-3 rounded-lg text-sm font-bold hover:bg-indigo-700">Manage</button>
@@ -392,27 +410,31 @@
                     `).join('');
                 } else {
                     area.classList.add('hidden');
+                    list.innerHTML = '';
                 }
             });
         }
 
         window.destroySession = async (code) => {
-            // FIX: Safely fallback to the active session code if no argument is passed
             const targetCode = typeof code === 'string' ? code : activeLiveSessionCode;
             if (!targetCode) return;
             
             if (confirm("End this session? All student progress for this code will be lost.")) {
+                // Optimistic UI Update: Instantly remove it from view
+                const cardEl = document.getElementById(`session-card-${targetCode}`);
+                if (cardEl) cardEl.remove();
+
+                if (activeLiveSessionCode === targetCode) {
+                    backToDashboardFromSession();
+                }
+
                 try {
-                    // FIX: Soft-delete by changing status to 'ended' to bypass strict delete rules
+                    // Soft-delete by changing status to 'ended' to bypass strict delete rules
                     const ref = doc(db, 'artifacts', appId, 'public', 'data', 'sessions', targetCode);
                     await setDoc(ref, { status: 'ended' }, { merge: true });
-                    
-                    if (activeLiveSessionCode === targetCode) {
-                        backToDashboardFromSession();
-                    }
                 } catch (error) {
-                    console.error("Failed to end session:", error);
-                    alert("Could not end the session. Please check your permissions: " + error.message);
+                    console.error("Failed to end session on server:", error);
+                    alert("Game removed locally, but sync failed. Please check permissions: " + error.message);
                 }
             }
         };
@@ -427,7 +449,7 @@
                     </div>
                     <h3 class="text-xl font-bold mb-4 text-slate-800 pr-20">${c.name}</h3>
                     <div class="space-y-2">
-                        <button onclick="launchGame('${c.id}', '${c.name}')" class="w-full bg-orange-500 text-white py-3 rounded-xl font-bold hover:bg-orange-600 transition-colors">🚀 Launch Game</button>
+                        <button onclick="prepareLaunch('quiz', '${c.id}', '${c.name}')" class="w-full bg-orange-500 text-white py-3 rounded-xl font-bold hover:bg-orange-600 transition-colors">🚀 Launch Game</button>
                         <button onclick="enterCollection('${c.id}', '${c.name}')" class="w-full bg-slate-50 text-slate-600 py-2 rounded-xl hover:bg-slate-100 font-medium">Edit Questions</button>
                     </div>
                 </div>
@@ -448,44 +470,26 @@
             document.getElementById('view-questions').classList.add('hidden');
         };
 
-        function syncQuestions(colId) {
-            const qRef = collection(db, 'artifacts', appId, 'users', currentUser.uid, 'collections', colId, 'questions');
-            qUnsubscribe = onSnapshot(qRef, (snap) => {
-                questionsList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                const grid = document.getElementById('questions-grid');
-                grid.innerHTML = questionsList.map(q => `
-                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative group">
-                        <div class="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onclick="editQuestion('${q.id}')" class="bg-indigo-100 text-indigo-600 p-1 px-2 rounded text-xs font-bold hover:bg-indigo-200">Edit</button>
-                            <button onclick="deleteQuestion('${q.id}')" class="bg-red-100 text-red-600 p-1 px-2 rounded text-xs font-bold hover:bg-red-200">Delete</button>
-                        </div>
-                        <p class="font-bold text-slate-800 mb-2 pr-16">${q.text}</p>
-                        <div class="grid grid-cols-2 gap-2 text-xs text-slate-500">
-                            <div class="p-1 rounded ${q.correct === 'A' ? 'bg-green-100 text-green-800 font-bold' : 'bg-slate-50'}">A: ${q.optA}</div>
-                            <div class="p-1 rounded ${q.correct === 'B' ? 'bg-green-100 text-green-800 font-bold' : 'bg-slate-50'}">B: ${q.optB}</div>
-                            <div class="p-1 rounded ${q.correct === 'C' ? 'bg-green-100 text-green-800 font-bold' : 'bg-slate-50'}">C: ${q.optC}</div>
-                            <div class="p-1 rounded ${q.correct === 'D' ? 'bg-green-100 text-green-800 font-bold' : 'bg-slate-50'}">D: ${q.optD}</div>
-                        </div>
-                    </div>
-                `).join('');
-            });
-        }
+        // --- NEW LAUNCH MODAL LOGIC ---
+        window.prepareLaunch = (mode, colId = null, colName = null) => {
+            pendingLaunchData = { mode, colId, colName };
+            document.getElementById('launch-cards-count').value = "1";
+            document.getElementById('launch-modal').classList.replace('hidden', 'flex');
+        };
+        window.closeLaunchModal = () => document.getElementById('launch-modal').classList.replace('flex', 'hidden');
 
-        window.saveCollection = async () => {
-            const name = document.getElementById('new-col-name').value;
-            const colId = document.getElementById('edit-col-id').value;
-            if (!name || !currentUser) return;
+        window.confirmLaunch = async () => {
+            const numCards = parseInt(document.getElementById('launch-cards-count').value) || 1;
+            closeLaunchModal();
             
-            if (colId) {
-                await updateDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'collections', colId), { name });
+            if (pendingLaunchData.mode === 'quiz') {
+                await executeLaunchQuiz(pendingLaunchData.colId, pendingLaunchData.colName, numCards);
             } else {
-                await addDoc(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'collections'), { name, createdAt: new Date().toISOString() });
+                await executeLaunchRegular(numCards);
             }
-            
-            closeColModal();
         };
 
-        window.launchGame = async (colId, colName) => {
+        async function executeLaunchQuiz(colId, colName, cardsPerPlayer) {
             const qSnap = await getDocs(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'collections', colId, 'questions'));
             let fullQuestions = [];
             qSnap.forEach(doc => {
@@ -499,27 +503,29 @@
                 title: colName, 
                 status: 'active',
                 mode: 'quiz',
+                cardsPerPlayer: cardsPerPlayer,
                 questions: fullQuestions,
                 drawnNumbers: [],
                 lastReset: Date.now()
             });
             document.getElementById('display-game-code').textContent = code;
             document.getElementById('code-modal').classList.replace('hidden', 'flex');
-        };
+        }
 
-        window.launchRegularGame = async () => {
+        async function executeLaunchRegular(cardsPerPlayer) {
             const code = Math.floor(100000 + Math.random() * 900000).toString();
             await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'sessions', code), {
                 teacherId: currentUser.uid,
                 title: "Classic Bingo",
                 status: 'active',
                 mode: 'regular',
+                cardsPerPlayer: cardsPerPlayer,
                 drawnNumbers: [],
                 lastReset: Date.now()
             });
             document.getElementById('display-game-code').textContent = code;
             document.getElementById('code-modal').classList.replace('hidden', 'flex');
-        };
+        }
 
         window.manageLiveSession = (code) => {
             activeLiveSessionCode = code;
@@ -545,7 +551,6 @@
                     const latest = drawn[drawn.length - 1];
                     document.getElementById('teacher-latest-draw').textContent = `${latest.letter}-${latest.num}`;
                     
-                    // Sorting by num automatically handles the ascending order within each specific column
                     const sortedDrawn = [...drawn].sort((a, b) => a.num - b.num);
                     sortedDrawn.forEach(d => {
                         const col = document.getElementById(`t-drawn-${d.letter.toLowerCase()}`);
@@ -610,13 +615,11 @@
             if (!confirm("Are you sure? This will clear all student boards and redraws for this session.")) return;
             try {
                 const ref = doc(db, 'artifacts', appId, 'public', 'data', 'sessions', activeLiveSessionCode);
-                // FIX: Use setDoc with merge instead of updateDoc to bypass strict update schemas
                 await setDoc(ref, {
                     drawnNumbers: [],
                     lastReset: Date.now()
                 }, { merge: true });
                 
-                // Add explicit feedback so the teacher knows the reset worked
                 alert("Game successfully reset!");
             } catch (err) {
                 console.error("Error resetting session:", err);
@@ -628,12 +631,7 @@
         document.getElementById('csv-input').onchange = (e) => {
             const file = e.target.files[0];
             if (!file) return;
-
-            if (!activeColId) {
-                alert("Please select or open a collection first.");
-                e.target.value = '';
-                return;
-            }
+            if (!activeColId) return;
 
             const reader = new FileReader();
             reader.onload = async (ev) => {
@@ -653,9 +651,7 @@
                                 text: c[0], optA: c[1], optB: c[2], optC: c[3], optD: c[4], correct: c[5].toUpperCase()
                             });
                             importCount++;
-                        } catch (err) {
-                            console.error("Error importing row:", err);
-                        }
+                        } catch (err) { console.error("Error importing row:", err); }
                     }
                 }
                 
@@ -666,6 +662,30 @@
             };
             reader.readAsText(file);
         };
+
+        function syncQuestions(colId) {
+            const qRef = collection(db, 'artifacts', appId, 'users', currentUser.uid, 'collections', colId, 'questions');
+            qUnsubscribe = onSnapshot(qRef, (snap) => {
+                questionsList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                const grid = document.getElementById('questions-grid');
+                grid.innerHTML = questionsList.map(q => `
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative group">
+                        <div class="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onclick="editQuestion('${q.id}')" class="bg-indigo-100 text-indigo-600 p-1 px-2 rounded text-xs font-bold hover:bg-indigo-200">Edit</button>
+                            <button onclick="deleteQuestion('${q.id}')" class="bg-red-100 text-red-600 p-1 px-2 rounded text-xs font-bold hover:bg-red-200">Delete</button>
+                        </div>
+                        <p class="font-bold text-slate-800 mb-2 pr-16">${q.text}</p>
+                        <div class="grid grid-cols-2 gap-2 text-xs text-slate-500">
+                            <div class="p-1 rounded ${q.correct === 'A' ? 'bg-green-100 text-green-800 font-bold' : 'bg-slate-50'}">A: ${q.optA}</div>
+                            <div class="p-1 rounded ${q.correct === 'B' ? 'bg-green-100 text-green-800 font-bold' : 'bg-slate-50'}">B: ${q.optB}</div>
+                            <div class="p-1 rounded ${q.correct === 'C' ? 'bg-green-100 text-green-800 font-bold' : 'bg-slate-50'}">C: ${q.optC}</div>
+                            <div class="p-1 rounded ${q.correct === 'D' ? 'bg-green-100 text-green-800 font-bold' : 'bg-slate-50'}">D: ${q.optD}</div>
+                        </div>
+                    </div>
+                `).join('');
+            });
+        }
+
 
         // --- STUDENT LOGIC ---
         document.getElementById('student-form').onsubmit = async (e) => {
@@ -680,7 +700,6 @@
                 await initAuth();
                 const sessSnap = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'sessions', code));
                 
-                // FIX: Check if game is actually active
                 if (!sessSnap.exists() || sessSnap.data().status !== 'active') {
                     throw new Error("This game code is no longer active or does not exist.");
                 }
@@ -698,41 +717,46 @@
                 activeQsKey      = `bingo_qs_${code}_${name}`;
                 activeResetKey   = `bingo_reset_${code}_${name}`;
                 
-                // FIX: Prevent false "reset" alert when first joining
                 if (!localStorage.getItem(activeResetKey) && data.lastReset) {
                     localStorage.setItem(activeResetKey, data.lastReset.toString());
                 }
                 
                 currentSessionMode = data.mode || 'quiz';
+                currentCardsPerPlayer = data.cardsPerPlayer || 1;
                 currentSessionQuestions = data.questions || [];
-
-                // Persistence: Assigned Questions to specific cells
-                let savedQs = localStorage.getItem(activeQsKey);
-                if (savedQs) {
-                    assignedQuestions = JSON.parse(savedQs);
-                } else {
-                    const qLen = Math.max(1, currentSessionQuestions.length);
-                    assignedQuestions = Array.from({length: 25}, () => Math.floor(Math.random() * qLen));
-                    localStorage.setItem(activeQsKey, JSON.stringify(assignedQuestions));
-                }
 
                 // Persistence: Marked cells & Cooldowns
                 markedCellsState = JSON.parse(localStorage.getItem(activeMarkedKey)) || {};
-                // Fallback for old array format
-                if (Array.isArray(markedCellsState)) {
-                    let newObj = {};
-                    markedCellsState.forEach(idx => newObj[idx] = "Marked");
-                    markedCellsState = newObj;
-                }
-                
                 cellCooldowns = JSON.parse(localStorage.getItem(activeCdKey)) || {};
 
-                // Persistence: The actual Bingo layout (the numbers)
-                let savedBoard = localStorage.getItem(activeStorageKey);
-                if (savedBoard) {
-                    renderBoardFromData(JSON.parse(savedBoard));
+                // Persistence: Assigned Questions to specific cells per board
+                let savedQs = localStorage.getItem(activeQsKey);
+                if (savedQs) {
+                    assignedQuestions = JSON.parse(savedQs);
+                    // Legacy migration: wrap in array if it was 1D
+                    if (assignedQuestions.length > 0 && !Array.isArray(assignedQuestions[0])) {
+                        assignedQuestions = [assignedQuestions];
+                    }
                 } else {
-                    generateBingoBoard();
+                    const qLen = Math.max(1, currentSessionQuestions.length);
+                    assignedQuestions = [];
+                    for(let c=0; c<currentCardsPerPlayer; c++) {
+                        assignedQuestions.push(Array.from({length: 25}, () => Math.floor(Math.random() * qLen)));
+                    }
+                    localStorage.setItem(activeQsKey, JSON.stringify(assignedQuestions));
+                }
+
+                // Persistence: Boards array
+                let savedBoards = localStorage.getItem(activeStorageKey);
+                if (savedBoards) {
+                    let parsedBoards = JSON.parse(savedBoards);
+                    // Legacy migration: wrap in array if 1D array of strings
+                    if (parsedBoards.length > 0 && typeof parsedBoards[0] === 'string' || typeof parsedBoards[0] === 'number') {
+                        parsedBoards = [parsedBoards];
+                    }
+                    renderBoardsFromData(parsedBoards);
+                } else {
+                    generateBingoBoards(currentCardsPerPlayer);
                 }
 
                 // Watch session for destruction and updates
@@ -801,105 +825,126 @@
             
             // Re-assign random questions to squares to keep it fresh
             const qLen = Math.max(1, currentSessionQuestions.length);
-            assignedQuestions = Array.from({length: 25}, () => Math.floor(Math.random() * qLen));
+            assignedQuestions = [];
+            for(let c=0; c<currentCardsPerPlayer; c++) {
+                assignedQuestions.push(Array.from({length: 25}, () => Math.floor(Math.random() * qLen)));
+            }
             localStorage.setItem(activeQsKey, JSON.stringify(assignedQuestions));
 
             if (choice === 'new') {
                 localStorage.removeItem(activeStorageKey);
-                generateBingoBoard();
+                generateBingoBoards(currentCardsPerPlayer);
             } else {
                 // Keep the exact same numbers, but re-render to clear marks
-                const savedBoard = localStorage.getItem(activeStorageKey);
-                if (savedBoard) {
-                    renderBoardFromData(JSON.parse(savedBoard));
+                const savedBoards = localStorage.getItem(activeStorageKey);
+                if (savedBoards) {
+                    renderBoardsFromData(JSON.parse(savedBoards));
                 } else {
-                    generateBingoBoard();
+                    generateBingoBoards(currentCardsPerPlayer);
                 }
             }
         };
 
-        function renderBoardFromData(boardItems) {
-            const grid = document.getElementById('bingo-card');
-            grid.innerHTML = '';
-            boardItems.forEach((item, i) => {
-                const cell = document.createElement('div');
-                cell.id = `cell-${i}`;
-                cell.className = 'bingo-cell bg-white border rounded-lg p-1 font-bold shadow-sm hover:bg-slate-50 transition-all relative';
+        function renderBoardsFromData(boardsArray) {
+            const container = document.getElementById('bingo-cards-container');
+            container.innerHTML = '';
+            
+            boardsArray.forEach((boardItems, cIdx) => {
+                const wrapper = document.createElement('div');
+                wrapper.className = "bg-white p-4 rounded-xl shadow-lg border-4 border-indigo-100 relative";
                 
-                cell.innerHTML = `<span class="text-xl">${item}</span>`;
-                
-                if (item === "FREE" || i === 12) {
-                    cell.innerHTML = `<span class="text-sm">FREE</span>`;
-                    cell.classList.add('marked', 'free', 'text-indigo-600');
-                } 
-                else if (markedCellsState[i]) {
-                    cell.classList.add('marked');
-                    
-                    if (currentSessionMode === 'quiz') {
-                        // Ensure marked cells don't look clickable in quiz mode
-                        cell.classList.remove('hover:bg-slate-50', 'cursor-pointer');
-                        cell.classList.add('cursor-default');
-                    }
-                    
-                    // Append the timestamp
-                    const timeStr = markedCellsState[i];
-                    cell.innerHTML += `<div class="text-[9px] text-indigo-200 mt-1 font-normal">${timeStr}</div>`;
-                } 
-                else if (cellCooldowns[i] && cellCooldowns[i] > Date.now() && currentSessionMode === 'quiz') {
-                    // Lock cell visually for cooldown
-                    cell.classList.add('opacity-60', 'cursor-not-allowed', 'bg-red-50');
-                    cell.classList.remove('bg-white', 'hover:bg-slate-50');
-                    const remaining = Math.ceil((cellCooldowns[i] - Date.now()) / 1000);
-                    cell.innerHTML += `<div class="cd-timer text-[11px] text-red-600 font-black mt-1">Wait ${remaining}s</div>`;
+                if (boardsArray.length > 1) {
+                    wrapper.innerHTML = `<div class="absolute -top-3 -left-3 bg-orange-500 text-white font-black rounded-full h-8 w-8 flex items-center justify-center shadow-md">#${cIdx + 1}</div>`;
                 }
 
-                cell.onclick = () => {
-                    // Disallow click if Free space
-                    if (item === "FREE" || i === 12) return; 
+                const header = document.createElement('div');
+                header.className = "grid grid-cols-5 gap-1 mb-2";
+                header.innerHTML = `
+                    <div class="bingo-header">B</div>
+                    <div class="bingo-header">I</div>
+                    <div class="bingo-header">N</div>
+                    <div class="bingo-header">G</div>
+                    <div class="bingo-header">O</div>
+                `;
+                wrapper.appendChild(header);
+
+                const grid = document.createElement('div');
+                grid.className = "bingo-grid";
+                
+                boardItems.forEach((item, i) => {
+                    const keyStr = `${cIdx}_${i}`;
+                    const cell = document.createElement('div');
+                    cell.id = `cell-${keyStr}`;
+                    cell.className = 'bingo-cell bg-white border rounded-lg p-1 font-bold shadow-sm hover:bg-slate-50 transition-all relative';
                     
-                    if (currentSessionMode === 'regular') {
-                        // In regular mode, let them toggle cells freely
-                        if (markedCellsState[i]) {
-                            delete markedCellsState[i];
-                            cell.classList.remove('marked');
-                        } else {
-                            const timeStr = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
-                            markedCellsState[i] = timeStr;
-                            cell.classList.add('marked');
+                    cell.innerHTML = `<span class="text-xl">${item}</span>`;
+                    
+                    if (item === "FREE" || i === 12) {
+                        cell.innerHTML = `<span class="text-sm">FREE</span>`;
+                        cell.classList.add('marked', 'free', 'text-indigo-600');
+                    } 
+                    else if (markedCellsState[keyStr]) {
+                        cell.classList.add('marked');
+                        if (currentSessionMode === 'quiz') {
+                            cell.classList.remove('hover:bg-slate-50', 'cursor-pointer');
+                            cell.classList.add('cursor-default');
                         }
-                        localStorage.setItem(activeMarkedKey, JSON.stringify(markedCellsState));
-                        const savedBoard = localStorage.getItem(activeStorageKey);
-                        if (savedBoard) renderBoardFromData(JSON.parse(savedBoard));
-                        return;
+                        const timeStr = markedCellsState[keyStr];
+                        cell.innerHTML += `<div class="text-[9px] text-indigo-200 mt-1 font-normal">${timeStr}</div>`;
+                    } 
+                    else if (cellCooldowns[keyStr] && cellCooldowns[keyStr] > Date.now() && currentSessionMode === 'quiz') {
+                        cell.classList.add('opacity-60', 'cursor-not-allowed', 'bg-red-50');
+                        cell.classList.remove('bg-white', 'hover:bg-slate-50');
+                        const remaining = Math.ceil((cellCooldowns[keyStr] - Date.now()) / 1000);
+                        cell.innerHTML += `<div class="cd-timer text-[11px] text-red-600 font-black mt-1">Wait ${remaining}s</div>`;
                     }
 
-                    // Quiz mode specific logic below:
-                    // Disallow click if already correctly answered (marked)
-                    if (markedCellsState[i]) return;
-                    
-                    // Disallow click if on cooldown
-                    if (cellCooldowns[i] && cellCooldowns[i] > Date.now()) return;
-                    
-                    // Show question
-                    presentQuestion(cell, i);
-                };
-                grid.appendChild(cell);
+                    cell.onclick = () => {
+                        if (item === "FREE" || i === 12) return; 
+                        
+                        if (currentSessionMode === 'regular') {
+                            if (markedCellsState[keyStr]) {
+                                delete markedCellsState[keyStr];
+                                cell.classList.remove('marked');
+                            } else {
+                                const timeStr = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+                                markedCellsState[keyStr] = timeStr;
+                                cell.classList.add('marked');
+                            }
+                            localStorage.setItem(activeMarkedKey, JSON.stringify(markedCellsState));
+                            const savedBoards = localStorage.getItem(activeStorageKey);
+                            if (savedBoards) renderBoardsFromData(JSON.parse(savedBoards));
+                            return;
+                        }
+
+                        // Quiz mode specific logic below
+                        if (markedCellsState[keyStr]) return;
+                        if (cellCooldowns[keyStr] && cellCooldowns[keyStr] > Date.now()) return;
+                        presentQuestion(cell, cIdx, i);
+                    };
+                    grid.appendChild(cell);
+                });
+
+                wrapper.appendChild(grid);
+                container.appendChild(wrapper);
             });
         }
 
-        function presentQuestion(cell, index) {
+        function presentQuestion(cell, cIdx, index) {
             if (currentSessionQuestions.length === 0) {
                 alert("No questions available in this session!");
                 return;
             }
             
-            // Retrieve pre-assigned question for this cell
-            const qIndex = assignedQuestions[index] || 0;
+            const qIndex = assignedQuestions[cIdx] && assignedQuestions[cIdx][index] !== undefined 
+                ? assignedQuestions[cIdx][index] : 0;
             const q = currentSessionQuestions[qIndex];
             
             document.getElementById('sq-text').textContent = q.text;
             const optionsDiv = document.getElementById('sq-options');
             optionsDiv.innerHTML = '';
+            
+            const keyStr = `${cIdx}_${index}`;
             
             ['A', 'B', 'C', 'D'].forEach(letter => {
                 const optText = q['opt' + letter];
@@ -910,33 +955,26 @@
                 
                 btn.onclick = () => {
                     if (letter === q.correct) {
-                        cell.classList.add('marked');
-                        if (!markedCellsState[index]) {
+                        if (!markedCellsState[keyStr]) {
                             const timeStr = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
-                            markedCellsState[index] = timeStr;
+                            markedCellsState[keyStr] = timeStr;
                             localStorage.setItem(activeMarkedKey, JSON.stringify(markedCellsState));
                         }
-                        
-                        // Re-render board cleanly
-                        const savedBoard = localStorage.getItem(activeStorageKey);
-                        if (savedBoard) renderBoardFromData(JSON.parse(savedBoard));
-                        
+                        const savedBoards = localStorage.getItem(activeStorageKey);
+                        if (savedBoards) renderBoardsFromData(JSON.parse(savedBoards));
                         closeStudentQuestionModal();
                     } else {
-                        // WRONG ANSWER Logic
                         alert("Incorrect! This square is locked for 10 seconds.");
                         
                         // Assign a completely new random question to this cell for when it unlocks
-                        assignedQuestions[index] = Math.floor(Math.random() * currentSessionQuestions.length);
+                        assignedQuestions[cIdx][index] = Math.floor(Math.random() * currentSessionQuestions.length);
                         localStorage.setItem(activeQsKey, JSON.stringify(assignedQuestions));
                         
-                        // Set 10s cooldown
-                        cellCooldowns[index] = Date.now() + 10000;
+                        cellCooldowns[keyStr] = Date.now() + 10000;
                         localStorage.setItem(activeCdKey, JSON.stringify(cellCooldowns));
                         
-                        const savedBoard = localStorage.getItem(activeStorageKey);
-                        if (savedBoard) renderBoardFromData(JSON.parse(savedBoard));
-                        
+                        const savedBoards = localStorage.getItem(activeStorageKey);
+                        if (savedBoards) renderBoardsFromData(JSON.parse(savedBoards));
                         closeStudentQuestionModal();
                     }
                 };
@@ -950,7 +988,7 @@
             document.getElementById('student-question-modal').classList.replace('flex', 'hidden');
         };
 
-        function generateBingoBoard() {
+        function generateSingleBoardArray() {
             const getNumbers = (min, max, count) => {
                 const nums = [];
                 for (let i = min; i <= max; i++) nums.push(i);
@@ -970,27 +1008,33 @@
                 else boardItems.push(n[row]);
                 boardItems.push(g[row], o[row]);
             }
+            return boardItems;
+        }
 
-            localStorage.setItem(activeStorageKey, JSON.stringify(boardItems));
-            renderBoardFromData(boardItems);
+        function generateBingoBoards(numCards) {
+            const boards = [];
+            for(let c=0; c<numCards; c++) {
+                boards.push(generateSingleBoardArray());
+            }
+            localStorage.setItem(activeStorageKey, JSON.stringify(boards));
+            renderBoardsFromData(boards);
         }
 
         // --- GLOBAL COOLDOWN INTERVAL ---
-        // Checks every second to update the visual countdowns on locked cells
         setInterval(() => {
             if (!activeCdKey) return; 
             const now = Date.now();
             let needsRender = false;
             
-            Object.keys(cellCooldowns).forEach(idx => {
-                if (cellCooldowns[idx] && cellCooldowns[idx] <= now) {
-                    delete cellCooldowns[idx];
+            Object.keys(cellCooldowns).forEach(keyStr => {
+                if (cellCooldowns[keyStr] && cellCooldowns[keyStr] <= now) {
+                    delete cellCooldowns[keyStr];
                     needsRender = true;
-                } else if (cellCooldowns[idx]) {
-                    const el = document.getElementById(`cell-${idx}`);
+                } else if (cellCooldowns[keyStr]) {
+                    const el = document.getElementById(`cell-${keyStr}`);
                     if (el) {
                         const timerSpan = el.querySelector('.cd-timer');
-                        const remaining = Math.ceil((cellCooldowns[idx] - now) / 1000);
+                        const remaining = Math.ceil((cellCooldowns[keyStr] - now) / 1000);
                         if (timerSpan) timerSpan.textContent = `Wait ${remaining}s`;
                     }
                 }
@@ -998,8 +1042,8 @@
             
             if (needsRender) {
                 localStorage.setItem(activeCdKey, JSON.stringify(cellCooldowns));
-                const savedBoard = localStorage.getItem(activeStorageKey);
-                if (savedBoard) renderBoardFromData(JSON.parse(savedBoard));
+                const savedBoards = localStorage.getItem(activeStorageKey);
+                if (savedBoards) renderBoardsFromData(JSON.parse(savedBoards));
             }
         }, 1000);
 
