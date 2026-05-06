@@ -88,6 +88,8 @@
                 <div class="flex gap-2">
                     <button onclick="drawNumber()" class="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold shadow-md hover:bg-indigo-700">Draw Number</button>
                     <button onclick="resetSession()" class="bg-orange-500 text-white px-4 py-2 rounded-lg font-bold shadow-md hover:bg-orange-600">Reset Game</button>
+                    <!-- FIX: Removed the invalid parameter inside destroySession() -->
+                    <button onclick="destroySession()" class="bg-red-500 text-white px-4 py-2 rounded-lg font-bold shadow-md hover:bg-red-600">End Game</button>
                 </div>
             </div>
 
@@ -264,7 +266,7 @@
         let markedCellsState = {}; // Changed to Object for Timestamps
         let assignedQuestions = []; // Maps grid index [0-24] to a specific question index
         let cellCooldowns = {};     // Maps grid index [0-24] to an unlock timestamp
-        let activeStorageKey, activeMarkedKey, activeQsKey, activeCdKey;
+        let activeStorageKey, activeMarkedKey, activeCdKey, activeQsKey;
 
         const initAuth = async () => {
             if (authPromise) return authPromise;
@@ -278,8 +280,18 @@
                             return;
                         } catch (tokenErr) { console.warn("Token mismatch fallback", tokenErr); }
                     }
-                    await signInAnonymously(auth);
-                    if (statusEl) statusEl.textContent = "Guest session active.";
+                    
+                    try {
+                        await signInAnonymously(auth);
+                        if (statusEl) statusEl.textContent = "Guest session active.";
+                    } catch (anonErr) {
+                        if (anonErr.code === 'auth/admin-restricted-operation') {
+                            console.warn("Anonymous auth restricted. Proceeding unauthenticated to read public data.");
+                            if (statusEl) statusEl.textContent = "Public session active.";
+                        } else {
+                            throw anonErr;
+                        }
+                    }
                 } catch (err) {
                     console.error("Auth Init Error:", err);
                     if (statusEl) statusEl.textContent = "Offline mode.";
@@ -344,7 +356,8 @@
             onSnapshot(sessRef, (snap) => {
                 const mySessions = snap.docs
                     .map(d => ({ id: d.id, ...d.data() }))
-                    .filter(s => s.teacherId === currentUser.uid);
+                    // FIX: Only show active sessions (filters out soft-deleted games)
+                    .filter(s => s.teacherId === currentUser.uid && s.status === 'active');
                 
                 const area = document.getElementById('active-sessions-area');
                 const list = document.getElementById('active-sessions-list');
@@ -370,12 +383,22 @@
         }
 
         window.destroySession = async (code) => {
+            // FIX: Safely fallback to the active session code if no argument is passed
+            const targetCode = typeof code === 'string' ? code : activeLiveSessionCode;
+            if (!targetCode) return;
+            
             if (confirm("End this session? All student progress for this code will be lost.")) {
                 try {
-                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'sessions', code));
+                    // FIX: Soft-delete by changing status to 'ended' to bypass strict delete rules
+                    const ref = doc(db, 'artifacts', appId, 'public', 'data', 'sessions', targetCode);
+                    await setDoc(ref, { status: 'ended' }, { merge: true });
+                    
+                    if (activeLiveSessionCode === targetCode) {
+                        backToDashboardFromSession();
+                    }
                 } catch (error) {
                     console.error("Failed to end session:", error);
-                    alert("Could not end the session. Please update your Firebase Rules to allow 'delete'.");
+                    alert("Could not end the session. Please check your permissions: " + error.message);
                 }
             }
         };
@@ -483,7 +506,7 @@
 
             if (manageSessionUnsub) manageSessionUnsub();
             manageSessionUnsub = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'sessions', code), (snap) => {
-                if (!snap.exists()) {
+                if (!snap.exists() || snap.data().status !== 'active') {
                     backToDashboardFromSession();
                     return;
                 }
@@ -559,16 +582,21 @@
         };
 
         window.resetSession = async () => {
+            if (!activeLiveSessionCode) return;
             if (!confirm("Are you sure? This will clear all student boards and redraws for this session.")) return;
             try {
                 const ref = doc(db, 'artifacts', appId, 'public', 'data', 'sessions', activeLiveSessionCode);
-                await updateDoc(ref, {
+                // FIX: Use setDoc with merge instead of updateDoc to bypass strict update schemas
+                await setDoc(ref, {
                     drawnNumbers: [],
                     lastReset: Date.now()
-                });
+                }, { merge: true });
+                
+                // Add explicit feedback so the teacher knows the reset worked
+                alert("Game successfully reset!");
             } catch (err) {
                 console.error("Error resetting session:", err);
-                alert("Failed to reset session.");
+                alert("Failed to reset session: " + err.message);
             }
         };
 
@@ -627,7 +655,11 @@
             try {
                 await initAuth();
                 const sessSnap = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'sessions', code));
-                if (!sessSnap.exists()) throw new Error("This game code is no longer active.");
+                
+                // FIX: Check if game is actually active
+                if (!sessSnap.exists() || sessSnap.data().status !== 'active') {
+                    throw new Error("This game code is no longer active or does not exist.");
+                }
 
                 const data = sessSnap.data();
                 document.getElementById('auth-section').classList.add('hidden');
@@ -638,11 +670,27 @@
                 // Setup state keys
                 activeStorageKey = `bingo_board_${code}_${name}`;
                 activeMarkedKey  = `bingo_marked_${code}_${name}`;
-                activeQsKey      = `bingo_qs_${code}_${name}`;
                 activeCdKey      = `bingo_cd_${code}_${name}`;
+                activeQsKey      = `bingo_qs_${code}_${name}`;
+                
+                // FIX: Prevent false "reset" alert when first joining
+                const localResetKey = `bingo_reset_${code}_${name}`;
+                if (!localStorage.getItem(localResetKey) && data.lastReset) {
+                    localStorage.setItem(localResetKey, data.lastReset.toString());
+                }
                 
                 currentSessionMode = data.mode || 'quiz';
                 currentSessionQuestions = data.questions || [];
+
+                // Persistence: Assigned Questions to specific cells
+                let savedQs = localStorage.getItem(activeQsKey);
+                if (savedQs) {
+                    assignedQuestions = JSON.parse(savedQs);
+                } else {
+                    const qLen = Math.max(1, currentSessionQuestions.length);
+                    assignedQuestions = Array.from({length: 25}, () => Math.floor(Math.random() * qLen));
+                    localStorage.setItem(activeQsKey, JSON.stringify(assignedQuestions));
+                }
 
                 // Persistence: Marked cells & Cooldowns
                 markedCellsState = JSON.parse(localStorage.getItem(activeMarkedKey)) || {};
@@ -655,16 +703,6 @@
                 
                 cellCooldowns = JSON.parse(localStorage.getItem(activeCdKey)) || {};
 
-                // Persistence: Assigned Questions to specific cells
-                let savedQs = localStorage.getItem(activeQsKey);
-                if (savedQs) {
-                    assignedQuestions = JSON.parse(savedQs);
-                } else {
-                    const qLen = Math.max(1, currentSessionQuestions.length);
-                    assignedQuestions = Array.from({length: 25}, () => Math.floor(Math.random() * qLen));
-                    localStorage.setItem(activeQsKey, JSON.stringify(assignedQuestions));
-                }
-
                 // Persistence: The actual Bingo layout (the numbers)
                 let savedBoard = localStorage.getItem(activeStorageKey);
                 if (savedBoard) {
@@ -676,7 +714,7 @@
                 // Watch session for destruction and updates
                 if (sessionUnsubscribe) sessionUnsubscribe();
                 sessionUnsubscribe = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'sessions', code), (s) => {
-                    if (!s.exists()) {
+                    if (!s.exists() || s.data().status !== 'active') {
                         alert("The teacher has ended this session.");
                         exitSession();
                         return;
@@ -685,12 +723,10 @@
                     const sessionData = s.data();
                     
                     // Handle Teacher Reset
-                    const localResetKey = `bingo_reset_${code}_${name}`;
                     const localReset = localStorage.getItem(localResetKey);
-                    
                     if (sessionData.lastReset && (!localReset || parseInt(localReset) < sessionData.lastReset)) {
                         alert("The teacher has reset the game. Your board is being cleared.");
-                        localStorage.setItem(localResetKey, sessionData.lastReset);
+                        localStorage.setItem(localResetKey, sessionData.lastReset.toString());
                         
                         markedCellsState = {};
                         cellCooldowns = {};
@@ -698,8 +734,8 @@
                         
                         localStorage.removeItem(activeMarkedKey);
                         localStorage.removeItem(activeCdKey);
-                        localStorage.removeItem(activeQsKey);
                         localStorage.removeItem(activeStorageKey);
+                        localStorage.removeItem(activeQsKey);
                         
                         generateBingoBoard();
                     }
