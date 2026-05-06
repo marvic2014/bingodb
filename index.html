@@ -596,13 +596,18 @@
                     });
                 }
 
-                // Render Extra Card Codes
+                // Render Extra Card Codes with REVOKE button
                 const codes = data.extraCardCodes || [];
                 const codeContainer = document.getElementById('teacher-extra-codes');
                 if (codes.length === 0) {
                     codeContainer.innerHTML = '<span class="text-slate-400 italic text-sm">No active codes.</span>';
                 } else {
-                    codeContainer.innerHTML = codes.map(c => `<span class="bg-indigo-100 text-indigo-800 px-3 py-1.5 rounded-lg font-mono font-bold border border-indigo-200 tracking-wider shadow-sm">${c}</span>`).join('');
+                    codeContainer.innerHTML = codes.map(c => `
+                        <div class="inline-flex items-center bg-indigo-100 text-indigo-800 rounded-lg border border-indigo-200 shadow-sm overflow-hidden">
+                            <span class="px-3 py-1.5 font-mono font-bold tracking-wider">${c}</span>
+                            <button onclick="revokeExtraCode('${c}')" class="bg-indigo-200 hover:bg-red-500 hover:text-white px-2 py-1.5 font-bold transition-colors" title="Revoke Code">✕</button>
+                        </div>
+                    `).join('');
                 }
             });
         };
@@ -668,6 +673,24 @@
             } catch (err) {
                 console.error("Error generating code:", err);
                 alert("Failed to generate code.");
+            }
+        };
+
+        // NEW: Teacher can manually revoke the code so no one else uses it
+        window.revokeExtraCode = async (codeToRemove) => {
+            if (!activeLiveSessionCode) return;
+            try {
+                const ref = doc(db, 'artifacts', appId, 'public', 'data', 'sessions', activeLiveSessionCode);
+                const snap = await getDoc(ref);
+                if (snap.exists()) {
+                    const data = snap.data();
+                    const codes = data.extraCardCodes || [];
+                    const newCodes = codes.filter(c => c !== codeToRemove);
+                    await updateDoc(ref, { extraCardCodes: newCodes });
+                }
+            } catch (err) {
+                console.error("Error revoking code:", err);
+                alert("Failed to revoke code.");
             }
         };
 
@@ -884,6 +907,16 @@
             if (!inputCode) return;
             if (!activeStudentSessionId) return;
             
+            // Check local usage to prevent the same student from spamming the code
+            const stuName = document.getElementById('stu-name').value;
+            const localUsedKey = `bingo_used_codes_${activeStudentSessionId}_${stuName}`;
+            const usedCodes = JSON.parse(localStorage.getItem(localUsedKey)) || [];
+            
+            if (usedCodes.includes(inputCode)) {
+                alert("You have already redeemed this code!");
+                return;
+            }
+            
             try {
                 const ref = doc(db, 'artifacts', appId, 'public', 'data', 'sessions', activeStudentSessionId);
                 const snap = await getDoc(ref);
@@ -894,13 +927,22 @@
                 
                 const codeIndex = codes.indexOf(inputCode);
                 if (codeIndex === -1) {
-                    alert("Invalid or already used code!");
+                    alert("Invalid code! Please check with your teacher.");
                     return;
                 }
                 
-                // Remove code from DB so it can't be used again
-                codes.splice(codeIndex, 1);
-                await updateDoc(ref, { extraCardCodes: codes });
+                // Try to remove code from DB so it can't be used by others
+                try {
+                    const newCodes = [...codes];
+                    newCodes.splice(codeIndex, 1);
+                    await updateDoc(ref, { extraCardCodes: newCodes });
+                } catch (updateErr) {
+                    console.warn("Could not remove code from server due to permissions. Relying on local validation.", updateErr);
+                }
+                
+                // Mark code as used locally
+                usedCodes.push(inputCode);
+                localStorage.setItem(localUsedKey, JSON.stringify(usedCodes));
                 
                 // Add new card locally
                 const savedBoards = JSON.parse(localStorage.getItem(activeStorageKey)) || [];
@@ -919,7 +961,7 @@
                 alert("Success! An extra Bingo card has been added to your board.");
                 
             } catch (err) {
-                console.error(err);
+                console.error("Redemption error:", err);
                 alert("Failed to redeem code.");
             }
         };
