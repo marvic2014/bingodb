@@ -448,12 +448,21 @@
                 if (drawn.length === 0) {
                     list.innerHTML = '<span class="text-slate-400 italic">No numbers drawn yet.</span>';
                 } else {
-                    list.innerHTML = drawn.map(d => `
+                    // Sort drawn numbers by B-I-N-G-O, then numerically
+                    const letterOrder = { 'B': 1, 'I': 2, 'N': 3, 'G': 4, 'O': 5 };
+                    const sortedDrawn = [...drawn].sort((a, b) => {
+                        if (letterOrder[a.letter] !== letterOrder[b.letter]) {
+                            return letterOrder[a.letter] - letterOrder[b.letter];
+                        }
+                        return a.num - b.num;
+                    });
+
+                    list.innerHTML = sortedDrawn.map(d => `
                         <div class="bg-indigo-50 border border-indigo-200 p-2 rounded-lg text-center min-w-[4rem]">
                             <div class="font-black text-indigo-700 text-lg">${d.letter}-${d.num}</div>
                             <div class="text-[10px] text-slate-500">${d.time}</div>
                         </div>
-                    `).reverse().join('');
+                    `).join('');
                 }
             });
         };
@@ -654,11 +663,20 @@
                     if (drawn.length === 0) {
                         drawnList.innerHTML = '<span class="text-slate-400 text-sm italic">Waiting for numbers...</span>';
                     } else {
-                        drawnList.innerHTML = drawn.map(d => `
+                        // Sort drawn numbers by B-I-N-G-O, then numerically
+                        const letterOrder = { 'B': 1, 'I': 2, 'N': 3, 'G': 4, 'O': 5 };
+                        const sortedDrawn = [...drawn].sort((a, b) => {
+                            if (letterOrder[a.letter] !== letterOrder[b.letter]) {
+                                return letterOrder[a.letter] - letterOrder[b.letter];
+                            }
+                            return a.num - b.num;
+                        });
+
+                        drawnList.innerHTML = sortedDrawn.map(d => `
                             <div class="bg-indigo-600 text-white px-2 py-1 rounded text-xs font-bold shadow-sm">
                                 ${d.letter}-${d.num}
                             </div>
-                        `).reverse().join('');
+                        `).join('');
                     }
                 });
             } catch (err) {
