@@ -58,6 +58,15 @@
             <button id="logout-btn" class="text-red-500 font-bold hover:bg-red-50 px-4 py-2 rounded-lg transition-all">Logout</button>
         </header>
 
+        <!-- NEW: Classic Bingo Quick Launch -->
+        <div class="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl p-6 mb-8 text-white shadow-lg flex flex-col md:flex-row justify-between items-center gap-4">
+            <div>
+                <h2 class="text-2xl font-bold mb-1">Classic Bingo</h2>
+                <p class="text-indigo-100 text-sm">Host a standard game without questions. Just draw numbers and let students mark their cards freely.</p>
+            </div>
+            <button onclick="launchRegularGame()" class="bg-white text-indigo-600 px-6 py-3 rounded-xl font-bold shadow-md hover:bg-slate-50 transition-all whitespace-nowrap">Host Classic Game</button>
+        </div>
+
         <!-- Active Sessions Section -->
         <div id="active-sessions-area" class="mb-8 hidden">
             <h2 class="text-xl font-bold text-slate-700 mb-4">Active Live Games</h2>
@@ -250,6 +259,7 @@
 
         // Student Local State Context
         let currentSessionQuestions = [];
+        let currentSessionMode = 'quiz'; // 'quiz' or 'regular'
         let markedCellsState = {}; // Changed to Object for Timestamps
         let assignedQuestions = []; // Maps grid index [0-24] to a specific question index
         let cellCooldowns = {};     // Maps grid index [0-24] to an unlock timestamp
@@ -343,7 +353,7 @@
                     list.innerHTML = mySessions.map(s => `
                         <div class="bg-indigo-50 border border-indigo-100 p-4 rounded-xl flex justify-between items-center">
                             <div>
-                                <span class="text-xs font-bold text-indigo-400 uppercase tracking-wider">Live: ${s.id}</span>
+                                <span class="text-xs font-bold text-indigo-400 uppercase tracking-wider">Live: ${s.id} <span class="ml-1 px-2 py-0.5 rounded bg-indigo-200 text-indigo-700">${s.mode === 'regular' ? 'Classic' : 'Quiz'}</span></span>
                                 <h3 class="font-bold text-indigo-900">${s.title}</h3>
                             </div>
                             <div class="flex gap-2">
@@ -436,7 +446,22 @@
                 collectionId: colId, 
                 title: colName, 
                 status: 'active',
+                mode: 'quiz',
                 questions: fullQuestions,
+                drawnNumbers: [],
+                lastReset: Date.now()
+            });
+            document.getElementById('display-game-code').textContent = code;
+            document.getElementById('code-modal').classList.replace('hidden', 'flex');
+        };
+
+        window.launchRegularGame = async () => {
+            const code = Math.floor(100000 + Math.random() * 900000).toString();
+            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'sessions', code), {
+                teacherId: currentUser.uid,
+                title: "Classic Bingo",
+                status: 'active',
+                mode: 'regular',
                 drawnNumbers: [],
                 lastReset: Date.now()
             });
@@ -606,6 +631,7 @@
                 activeQsKey      = `bingo_qs_${code}_${name}`;
                 activeCdKey      = `bingo_cd_${code}_${name}`;
                 
+                currentSessionMode = data.mode || 'quiz';
                 currentSessionQuestions = data.questions || [];
 
                 // Persistence: Marked cells & Cooldowns
@@ -716,14 +742,18 @@
                 } 
                 else if (markedCellsState[i]) {
                     cell.classList.add('marked');
-                    // Ensure marked cells don't look clickable
-                    cell.classList.remove('hover:bg-slate-50', 'cursor-pointer');
-                    cell.classList.add('cursor-default');
+                    
+                    if (currentSessionMode === 'quiz') {
+                        // Ensure marked cells don't look clickable in quiz mode
+                        cell.classList.remove('hover:bg-slate-50', 'cursor-pointer');
+                        cell.classList.add('cursor-default');
+                    }
+                    
                     // Append the timestamp
                     const timeStr = markedCellsState[i];
                     cell.innerHTML += `<div class="text-[9px] text-indigo-200 mt-1 font-normal">${timeStr}</div>`;
                 } 
-                else if (cellCooldowns[i] && cellCooldowns[i] > Date.now()) {
+                else if (cellCooldowns[i] && cellCooldowns[i] > Date.now() && currentSessionMode === 'quiz') {
                     // Lock cell visually for cooldown
                     cell.classList.add('opacity-60', 'cursor-not-allowed', 'bg-red-50');
                     cell.classList.remove('bg-white', 'hover:bg-slate-50');
@@ -735,6 +765,23 @@
                     // Disallow click if Free space
                     if (item === "FREE" || i === 12) return; 
                     
+                    if (currentSessionMode === 'regular') {
+                        // In regular mode, let them toggle cells freely
+                        if (markedCellsState[i]) {
+                            delete markedCellsState[i];
+                            cell.classList.remove('marked');
+                        } else {
+                            const timeStr = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+                            markedCellsState[i] = timeStr;
+                            cell.classList.add('marked');
+                        }
+                        localStorage.setItem(activeMarkedKey, JSON.stringify(markedCellsState));
+                        const savedBoard = localStorage.getItem(activeStorageKey);
+                        if (savedBoard) renderBoardFromData(JSON.parse(savedBoard));
+                        return;
+                    }
+
+                    // Quiz mode specific logic below:
                     // Disallow click if already correctly answered (marked)
                     if (markedCellsState[i]) return;
                     
