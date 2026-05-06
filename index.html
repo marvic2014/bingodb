@@ -204,7 +204,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc, getDocs, deleteDoc, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc, getDocs, deleteDoc, updateDoc, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyCN7gtZAYAPEnO9MSP3ZzogJIWjXaQLaL0",
@@ -468,43 +468,53 @@
 
         window.drawNumber = async () => {
             if (!activeLiveSessionCode) return;
-            const ref = doc(db, 'artifacts', appId, 'public', 'data', 'sessions', activeLiveSessionCode);
-            const snap = await getDoc(ref);
-            if (!snap.exists()) return;
-            
-            const data = snap.data();
-            const drawn = data.drawnNumbers || [];
-            
-            if (drawn.length >= 75) {
-                alert("All 75 numbers have been drawn!");
-                return;
+            try {
+                const ref = doc(db, 'artifacts', appId, 'public', 'data', 'sessions', activeLiveSessionCode);
+                const snap = await getDoc(ref);
+                if (!snap.exists()) return;
+                
+                const data = snap.data();
+                const drawn = data.drawnNumbers || [];
+                
+                if (drawn.length >= 75) {
+                    alert("All 75 numbers have been drawn!");
+                    return;
+                }
+
+                let num;
+                do {
+                    num = Math.floor(Math.random() * 75) + 1;
+                } while (drawn.some(d => d.num === num));
+
+                let letter = '';
+                if (num <= 15) letter = 'B';
+                else if (num <= 30) letter = 'I';
+                else if (num <= 45) letter = 'N';
+                else if (num <= 60) letter = 'G';
+                else letter = 'O';
+
+                const timeStr = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+                drawn.push({ num, letter, time: timeStr });
+
+                await updateDoc(ref, { drawnNumbers: drawn });
+            } catch (err) {
+                console.error("Error drawing number:", err);
+                alert("Failed to draw number. Please check your permissions.");
             }
-
-            let num;
-            do {
-                num = Math.floor(Math.random() * 75) + 1;
-            } while (drawn.some(d => d.num === num));
-
-            let letter = '';
-            if (num <= 15) letter = 'B';
-            else if (num <= 30) letter = 'I';
-            else if (num <= 45) letter = 'N';
-            else if (num <= 60) letter = 'G';
-            else letter = 'O';
-
-            const timeStr = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
-            drawn.push({ num, letter, time: timeStr });
-
-            await updateDoc(ref, { drawnNumbers: drawn });
         };
 
         window.resetSession = async () => {
             if (!confirm("Are you sure? This will clear all student boards and redraws for this session.")) return;
-            const ref = doc(db, 'artifacts', appId, 'public', 'data', 'sessions', activeLiveSessionCode);
-            await updateDoc(ref, {
-                drawnNumbers: [],
-                lastReset: Date.now()
-            });
+            try {
+                const ref = doc(db, 'artifacts', appId, 'public', 'data', 'sessions', activeLiveSessionCode);
+                await updateDoc(ref, {
+                    drawnNumbers: [],
+                    lastReset: Date.now()
+                });
+            } catch (err) {
+                console.error("Error resetting session:", err);
+                alert("Failed to reset session.");
+            }
         };
 
         // --- CSV IMPORT LOGIC ---
