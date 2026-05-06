@@ -197,10 +197,11 @@
 
     <div id="col-modal" class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-50">
         <div class="bg-white p-6 rounded-2xl w-full max-w-sm">
-            <h2 class="text-xl font-bold mb-4">New Collection</h2>
+            <h2 id="col-modal-title" class="text-xl font-bold mb-4">New Collection</h2>
+            <input type="hidden" id="edit-col-id">
             <input type="text" id="new-col-name" placeholder="Collection Name" class="w-full p-3 border rounded-lg mb-4">
             <div class="flex gap-2">
-                <button onclick="saveCollection()" class="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold">Create</button>
+                <button onclick="saveCollection()" class="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold">Save</button>
                 <button onclick="closeColModal()" class="flex-1 bg-slate-100 py-2 rounded-lg">Cancel</button>
             </div>
         </div>
@@ -406,8 +407,12 @@
         function renderCollections() {
             const grid = document.getElementById('collections-grid');
             grid.innerHTML = collectionsList.map(c => `
-                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                    <h3 class="text-xl font-bold mb-4 text-slate-800">${c.name}</h3>
+                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative group">
+                    <div class="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onclick="editCollection('${c.id}')" class="bg-indigo-100 text-indigo-600 p-1 px-2 rounded text-xs font-bold hover:bg-indigo-200">Edit</button>
+                        <button onclick="deleteCollection('${c.id}')" class="bg-red-100 text-red-600 p-1 px-2 rounded text-xs font-bold hover:bg-red-200">Delete</button>
+                    </div>
+                    <h3 class="text-xl font-bold mb-4 text-slate-800 pr-20">${c.name}</h3>
                     <div class="space-y-2">
                         <button onclick="launchGame('${c.id}', '${c.name}')" class="w-full bg-orange-500 text-white py-3 rounded-xl font-bold hover:bg-orange-600 transition-colors">🚀 Launch Game</button>
                         <button onclick="enterCollection('${c.id}', '${c.name}')" class="w-full bg-slate-50 text-slate-600 py-2 rounded-xl hover:bg-slate-100 font-medium">Edit Questions</button>
@@ -455,10 +460,16 @@
 
         window.saveCollection = async () => {
             const name = document.getElementById('new-col-name').value;
+            const colId = document.getElementById('edit-col-id').value;
             if (!name || !currentUser) return;
-            await addDoc(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'collections'), { name, createdAt: new Date().toISOString() });
+            
+            if (colId) {
+                await updateDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'collections', colId), { name });
+            } else {
+                await addDoc(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'collections'), { name, createdAt: new Date().toISOString() });
+            }
+            
             closeColModal();
-            document.getElementById('new-col-name').value = '';
         };
 
         window.launchGame = async (colId, colName) => {
@@ -958,7 +969,12 @@
         }, 1000);
 
         // Standard Modal/UI Handlers
-        window.openColModal = () => document.getElementById('col-modal').classList.replace('hidden', 'flex');
+        window.openColModal = () => {
+            document.getElementById('edit-col-id').value = '';
+            document.getElementById('new-col-name').value = '';
+            document.getElementById('col-modal-title').textContent = "New Collection";
+            document.getElementById('col-modal').classList.replace('hidden', 'flex');
+        };
         window.closeColModal = () => document.getElementById('col-modal').classList.replace('flex', 'hidden');
         window.closeCodeModal = () => document.getElementById('code-modal').classList.replace('flex', 'hidden');
         
@@ -971,6 +987,21 @@
         
         window.closeQuestionModal = () => document.getElementById('question-modal').classList.replace('flex', 'hidden');
         window.checkBingo = () => alert("Submitting Bingo for verification!");
+
+        window.editCollection = (id) => {
+            const c = collectionsList.find(x => x.id === id);
+            if (!c) return;
+            document.getElementById('edit-col-id').value = c.id;
+            document.getElementById('new-col-name').value = c.name;
+            document.getElementById('col-modal-title').textContent = "Edit Collection";
+            document.getElementById('col-modal').classList.replace('hidden', 'flex');
+        };
+
+        window.deleteCollection = async (id) => {
+            if (confirm("Are you sure you want to delete this collection? This action cannot be undone.")) {
+                await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'collections', id));
+            }
+        };
 
         window.editQuestion = (id) => {
             const q = questionsList.find(x => x.id === id);
