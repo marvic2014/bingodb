@@ -58,7 +58,7 @@
             <button id="logout-btn" class="text-red-500 font-bold hover:bg-red-50 px-4 py-2 rounded-lg transition-all">Logout</button>
         </header>
 
-        <!-- NEW: Classic Bingo Quick Launch -->
+        <!-- Classic Bingo Quick Launch -->
         <div class="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl p-6 mb-8 text-white shadow-lg flex flex-col md:flex-row justify-between items-center gap-4">
             <div>
                 <h2 class="text-2xl font-bold mb-1">Classic Bingo</h2>
@@ -85,10 +85,21 @@
                     <h3 class="font-bold text-gray-700">Game Controls</h3>
                     <p class="text-sm text-gray-500">Draw numbers to call out to your students.</p>
                 </div>
-                <div class="flex gap-2">
-                    <button onclick="drawNumber()" class="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold shadow-md hover:bg-indigo-700">Draw Number</button>
-                    <button onclick="resetSession()" class="bg-orange-500 text-white px-4 py-2 rounded-lg font-bold shadow-md hover:bg-orange-600">Reset Game</button>
-                    <button onclick="destroySession()" class="bg-red-500 text-white px-4 py-2 rounded-lg font-bold shadow-md hover:bg-red-600">End Game</button>
+                <div class="flex flex-col items-end gap-2">
+                    <div class="flex gap-2">
+                        <button onclick="drawNumber()" class="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold shadow-md hover:bg-indigo-700">Draw Number</button>
+                        <button onclick="resetSession()" class="bg-orange-500 text-white px-4 py-2 rounded-lg font-bold shadow-md hover:bg-orange-600">Reset Game</button>
+                        <button onclick="destroySession()" class="bg-red-500 text-white px-4 py-2 rounded-lg font-bold shadow-md hover:bg-red-600">End Game</button>
+                    </div>
+                    <!-- NEW: Reset Behavior Toggle -->
+                    <div class="flex items-center gap-2 text-sm bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg shadow-sm">
+                        <label for="teacher-reset-mode" class="font-bold text-slate-600 whitespace-nowrap">On Reset:</label>
+                        <select id="teacher-reset-mode" onchange="changeResetMode()" class="bg-transparent font-bold text-indigo-700 outline-none cursor-pointer text-right">
+                            <option value="ask">Ask Player (Keep or New)</option>
+                            <option value="force_new">Force New Cards</option>
+                            <option value="force_keep">Force Keep Cards</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
@@ -538,6 +549,7 @@
                 questions: fullQuestions,
                 drawnNumbers: [],
                 extraCardCodes: [],
+                resetMode: 'ask', // New toggle configuration
                 lastReset: Date.now()
             });
             document.getElementById('display-game-code').textContent = code;
@@ -554,6 +566,7 @@
                 cardsPerPlayer: cardsPerPlayer,
                 drawnNumbers: [],
                 extraCardCodes: [],
+                resetMode: 'ask', // New toggle configuration
                 lastReset: Date.now()
             });
             document.getElementById('display-game-code').textContent = code;
@@ -575,6 +588,12 @@
                 }
                 const data = snap.data();
                 const drawn = data.drawnNumbers || [];
+
+                // Sync the reset dropdown with the server database
+                const resetModeSelect = document.getElementById('teacher-reset-mode');
+                if (resetModeSelect && data.resetMode) {
+                    resetModeSelect.value = data.resetMode;
+                }
                 
                 ['b', 'i', 'n', 'g', 'o'].forEach(l => document.getElementById(`t-drawn-${l}`).innerHTML = '');
                 
@@ -714,6 +733,17 @@
             }
         };
 
+        window.changeResetMode = async () => {
+            if (!activeLiveSessionCode) return;
+            const mode = document.getElementById('teacher-reset-mode').value;
+            try {
+                const ref = doc(db, 'artifacts', appId, 'public', 'data', 'sessions', activeLiveSessionCode);
+                await updateDoc(ref, { resetMode: mode });
+            } catch (err) {
+                console.error("Failed to change reset mode:", err);
+            }
+        };
+
         window.resetSession = async () => {
             if (!activeLiveSessionCode) return;
             if (!confirm("Are you sure? This will clear all student boards and redraws for this session.")) return;
@@ -724,7 +754,7 @@
                     lastReset: Date.now()
                 }, { merge: true });
                 
-                alert("Game successfully reset!");
+                alert("Game successfully reset! Student cards will update based on your selected setting.");
             } catch (err) {
                 console.error("Error resetting session:", err);
                 alert("Failed to reset session: " + err.message);
@@ -828,7 +858,11 @@
                 }
                 
                 currentSessionMode = data.mode || 'quiz';
-                currentCardsPerPlayer = data.cardsPerPlayer || 1;
+                
+                // Calculate total cards based on base rules + any codes redeemed on the server under their name (case-insensitive)
+                const myExtraCodesCount = (data.extraCardCodes || []).filter(c => c.usedBy && c.usedBy.toLowerCase() === name.toLowerCase()).length;
+                currentCardsPerPlayer = (data.cardsPerPlayer || 1) + myExtraCodesCount;
+                
                 currentSessionQuestions = data.questions || [];
 
                 // Persistence: Marked cells & Cooldowns
@@ -844,26 +878,30 @@
                         assignedQuestions = [assignedQuestions];
                     }
                 } else {
-                    const qLen = Math.max(1, currentSessionQuestions.length);
                     assignedQuestions = [];
-                    for(let c=0; c<currentCardsPerPlayer; c++) {
-                        assignedQuestions.push(Array.from({length: 25}, () => Math.floor(Math.random() * qLen)));
-                    }
-                    localStorage.setItem(activeQsKey, JSON.stringify(assignedQuestions));
                 }
+                
+                // Dynamically ensure they have enough questions generated for all their cards
+                const qLen = Math.max(1, currentSessionQuestions.length);
+                while (assignedQuestions.length < currentCardsPerPlayer) {
+                    assignedQuestions.push(Array.from({length: 25}, () => Math.floor(Math.random() * qLen)));
+                }
+                localStorage.setItem(activeQsKey, JSON.stringify(assignedQuestions));
 
                 // Persistence: Boards array
                 let savedBoards = localStorage.getItem(activeStorageKey);
-                if (savedBoards) {
-                    let parsedBoards = JSON.parse(savedBoards);
-                    // Legacy migration: wrap in array if 1D array of strings
-                    if (parsedBoards.length > 0 && typeof parsedBoards[0] === 'string' || typeof parsedBoards[0] === 'number') {
-                        parsedBoards = [parsedBoards];
-                    }
-                    renderBoardsFromData(parsedBoards);
-                } else {
-                    generateBingoBoards(currentCardsPerPlayer);
+                let parsedBoards = savedBoards ? JSON.parse(savedBoards) : [];
+                // Legacy migration: wrap in array if 1D array of strings
+                if (parsedBoards.length > 0 && (typeof parsedBoards[0] === 'string' || typeof parsedBoards[0] === 'number')) {
+                    parsedBoards = [parsedBoards];
                 }
+                
+                // Dynamically regenerate missing boards if they joined from a new browser/incognito
+                while (parsedBoards.length < currentCardsPerPlayer) {
+                    parsedBoards.push(generateSingleBoardArray());
+                }
+                localStorage.setItem(activeStorageKey, JSON.stringify(parsedBoards));
+                renderBoardsFromData(parsedBoards);
 
                 // Watch session for destruction and updates
                 if (sessionUnsubscribe) sessionUnsubscribe();
@@ -876,11 +914,22 @@
                     
                     const sessionData = s.data();
                     
-                    // Handle Teacher Reset - Show Choice Modal
+                    // Handle Teacher Reset - Check the Mode
                     const localReset = localStorage.getItem(activeResetKey);
                     if (sessionData.lastReset && (!localReset || parseInt(localReset) < sessionData.lastReset)) {
                         pendingResetTimestamp = sessionData.lastReset;
-                        document.getElementById('student-reset-modal').classList.replace('hidden', 'flex');
+                        
+                        const rMode = sessionData.resetMode || 'ask';
+                        if (rMode === 'force_new') {
+                            alert("The teacher has reset the game. You have been given new card(s).");
+                            handleResetChoice('new');
+                        } else if (rMode === 'force_keep') {
+                            alert("The teacher has reset the game. Your board has been cleared, but you keep your numbers.");
+                            handleResetChoice('keep');
+                        } else {
+                            // Show Choice Modal
+                            document.getElementById('student-reset-modal').classList.replace('hidden', 'flex');
+                        }
                     }
                     
                     // Update Student Drawn Numbers UI
@@ -974,7 +1023,8 @@
                 usedCodes.push(inputCode);
                 localStorage.setItem(localUsedKey, JSON.stringify(usedCodes));
                 
-                // Add new card locally
+                // Add new card locally and update count
+                currentCardsPerPlayer++;
                 const savedBoards = JSON.parse(localStorage.getItem(activeStorageKey)) || [];
                 const newBoard = generateSingleBoardArray();
                 savedBoards.push(newBoard);
@@ -1144,7 +1194,7 @@
                 const optText = q['opt' + letter];
                 if (!optText) return;
                 const btn = document.createElement('button');
-                btn.className = "w-full p-4 text-left border-2 border-slate-200 rounded-xl font-medium hover:border-indigo-500 hover:bg-indigo-50 transition-all";
+                btn.className = "w-full p-4 text-left border-2 border-slate-200 rounded-xl font-medium hover:border-indigo-50 hover:bg-indigo-50 transition-all";
                 btn.textContent = `${letter}: ${optText}`;
                 
                 btn.onclick = () => {
