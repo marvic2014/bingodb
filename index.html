@@ -502,7 +502,12 @@
                     const sortedDrawn = [...drawn].sort((a, b) => a.num - b.num);
                     sortedDrawn.forEach(d => {
                         const col = document.getElementById(`t-drawn-${d.letter.toLowerCase()}`);
-                        col.innerHTML += `<div class="bg-indigo-50 rounded text-sm py-1 font-bold text-indigo-900 border border-indigo-100 shadow-sm">${d.num}</div>`;
+                        col.innerHTML += `
+                            <div class="bg-indigo-50 rounded py-1 flex flex-col items-center border border-indigo-100 shadow-sm mb-1">
+                                <span class="text-sm font-bold text-indigo-900 leading-tight">${d.num}</span>
+                                <span class="text-[8px] text-slate-500 font-normal leading-tight">${d.time}</span>
+                            </div>
+                        `;
                     });
                 }
             });
