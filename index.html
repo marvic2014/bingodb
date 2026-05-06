@@ -107,6 +107,20 @@
                     </div>
                 </div>
             </div>
+
+            <!-- NEW: Extra Card Code Manager -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mt-6">
+                <div class="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
+                    <div>
+                        <h3 class="font-bold text-gray-700">Extra Card Codes</h3>
+                        <p class="text-sm text-gray-500">Generate single-use codes to give students an extra card.</p>
+                    </div>
+                    <button onclick="generateExtraCode()" class="bg-green-100 text-green-700 px-4 py-2 rounded-lg font-bold shadow-sm hover:bg-green-200 whitespace-nowrap">+ Generate Code</button>
+                </div>
+                <div id="teacher-extra-codes" class="flex flex-wrap gap-2">
+                    <span class="text-slate-400 italic text-sm">No active codes.</span>
+                </div>
+            </div>
         </div>
 
         <div id="view-collections">
@@ -141,7 +155,10 @@
                     <h2 class="text-xl font-bold text-gray-800" id="game-title">Bingo Game</h2>
                     <p class="text-indigo-600 font-bold" id="player-display"></p>
                 </div>
-                <button onclick="exitSession()" class="text-slate-400 text-sm hover:text-red-500 font-medium">Exit Game</button>
+                <div class="flex items-center gap-2">
+                    <button onclick="openExtraCardModal()" class="bg-green-100 text-green-700 px-3 py-1.5 rounded-lg text-sm font-bold shadow-sm hover:bg-green-200 whitespace-nowrap">+ Extra Card</button>
+                    <button onclick="exitSession()" class="text-slate-400 text-sm hover:text-red-500 font-medium px-2">Exit</button>
+                </div>
             </div>
             
             <!-- Student's view of Drawn Numbers -->
@@ -210,6 +227,19 @@
             <div class="flex gap-2">
                 <button onclick="handleResetChoice('new')" class="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all">New Card(s)</button>
                 <button onclick="handleResetChoice('keep')" class="flex-1 bg-slate-100 text-slate-700 py-3 rounded-xl font-bold hover:bg-slate-200 transition-all">Keep Card(s)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- NEW: Extra Card Entry Modal -->
+    <div id="extra-card-modal" class="fixed inset-0 bg-black/80 hidden items-center justify-center p-4 z-[140]">
+        <div class="bg-white p-8 rounded-3xl w-full max-w-sm shadow-2xl text-center">
+            <h2 class="text-2xl font-bold text-slate-800 mb-2">Redeem Extra Card</h2>
+            <p class="text-slate-500 text-sm mb-6">Enter the single-use code provided by your teacher.</p>
+            <input type="text" id="extra-card-code" placeholder="e.g. A1B2C" class="w-full p-4 border border-slate-300 rounded-lg mb-6 outline-none focus:ring-2 focus:ring-indigo-500 uppercase font-mono text-center tracking-widest text-2xl font-bold">
+            <div class="flex gap-2">
+                <button onclick="submitExtraCardCode()" class="flex-1 bg-green-500 text-white py-3 rounded-xl font-bold hover:bg-green-600 transition-all">Redeem</button>
+                <button onclick="closeExtraCardModal()" class="flex-1 bg-slate-100 text-slate-600 py-3 rounded-xl font-bold hover:bg-slate-200 transition-all">Cancel</button>
             </div>
         </div>
     </div>
@@ -290,6 +320,7 @@
         let pendingLaunchData = {}; // Stores mode/colId for the launch modal
 
         // Student Local State Context
+        let activeStudentSessionId = null;
         let currentSessionQuestions = [];
         let currentSessionMode = 'quiz'; // 'quiz' or 'regular'
         let currentCardsPerPlayer = 1;
@@ -506,6 +537,7 @@
                 cardsPerPlayer: cardsPerPlayer,
                 questions: fullQuestions,
                 drawnNumbers: [],
+                extraCardCodes: [],
                 lastReset: Date.now()
             });
             document.getElementById('display-game-code').textContent = code;
@@ -521,6 +553,7 @@
                 mode: 'regular',
                 cardsPerPlayer: cardsPerPlayer,
                 drawnNumbers: [],
+                extraCardCodes: [],
                 lastReset: Date.now()
             });
             document.getElementById('display-game-code').textContent = code;
@@ -561,6 +594,15 @@
                             </div>
                         `;
                     });
+                }
+
+                // Render Extra Card Codes
+                const codes = data.extraCardCodes || [];
+                const codeContainer = document.getElementById('teacher-extra-codes');
+                if (codes.length === 0) {
+                    codeContainer.innerHTML = '<span class="text-slate-400 italic text-sm">No active codes.</span>';
+                } else {
+                    codeContainer.innerHTML = codes.map(c => `<span class="bg-indigo-100 text-indigo-800 px-3 py-1.5 rounded-lg font-mono font-bold border border-indigo-200 tracking-wider shadow-sm">${c}</span>`).join('');
                 }
             });
         };
@@ -607,6 +649,25 @@
             } catch (err) {
                 console.error("Error drawing number:", err);
                 alert("Failed to draw number. Please check your permissions.");
+            }
+        };
+
+        window.generateExtraCode = async () => {
+            if (!activeLiveSessionCode) return;
+            // Generate a 5-character alphanumeric code
+            const newCode = Math.random().toString(36).substring(2, 7).toUpperCase();
+            try {
+                const ref = doc(db, 'artifacts', appId, 'public', 'data', 'sessions', activeLiveSessionCode);
+                const snap = await getDoc(ref);
+                if (snap.exists()) {
+                    const data = snap.data();
+                    const codes = data.extraCardCodes || [];
+                    codes.push(newCode);
+                    await updateDoc(ref, { extraCardCodes: codes });
+                }
+            } catch (err) {
+                console.error("Error generating code:", err);
+                alert("Failed to generate code.");
             }
         };
 
@@ -705,6 +766,8 @@
                 }
 
                 const data = sessSnap.data();
+                activeStudentSessionId = code; // Save for extra card redemption
+                
                 document.getElementById('auth-section').classList.add('hidden');
                 document.getElementById('student-game').classList.remove('hidden');
                 document.getElementById('game-title').textContent = data.title;
@@ -803,10 +866,62 @@
 
         window.exitSession = () => {
             if (sessionUnsubscribe) sessionUnsubscribe();
+            activeStudentSessionId = null;
             document.getElementById('student-game').classList.add('hidden');
             document.getElementById('auth-section').classList.remove('hidden');
             document.getElementById('btn-student-join').disabled = false;
             document.getElementById('btn-student-join').textContent = "Join Game";
+        };
+
+        window.openExtraCardModal = () => {
+            document.getElementById('extra-card-code').value = '';
+            document.getElementById('extra-card-modal').classList.replace('hidden', 'flex');
+        };
+        window.closeExtraCardModal = () => document.getElementById('extra-card-modal').classList.replace('flex', 'hidden');
+
+        window.submitExtraCardCode = async () => {
+            const inputCode = document.getElementById('extra-card-code').value.trim().toUpperCase();
+            if (!inputCode) return;
+            if (!activeStudentSessionId) return;
+            
+            try {
+                const ref = doc(db, 'artifacts', appId, 'public', 'data', 'sessions', activeStudentSessionId);
+                const snap = await getDoc(ref);
+                if (!snap.exists()) return;
+                
+                const data = snap.data();
+                const codes = data.extraCardCodes || [];
+                
+                const codeIndex = codes.indexOf(inputCode);
+                if (codeIndex === -1) {
+                    alert("Invalid or already used code!");
+                    return;
+                }
+                
+                // Remove code from DB so it can't be used again
+                codes.splice(codeIndex, 1);
+                await updateDoc(ref, { extraCardCodes: codes });
+                
+                // Add new card locally
+                const savedBoards = JSON.parse(localStorage.getItem(activeStorageKey)) || [];
+                const newBoard = generateSingleBoardArray();
+                savedBoards.push(newBoard);
+                localStorage.setItem(activeStorageKey, JSON.stringify(savedBoards));
+                
+                // Assign questions for this new card
+                const qLen = Math.max(1, currentSessionQuestions.length);
+                const savedQs = JSON.parse(localStorage.getItem(activeQsKey)) || [];
+                savedQs.push(Array.from({length: 25}, () => Math.floor(Math.random() * qLen)));
+                localStorage.setItem(activeQsKey, JSON.stringify(savedQs));
+                
+                renderBoardsFromData(savedBoards);
+                closeExtraCardModal();
+                alert("Success! An extra Bingo card has been added to your board.");
+                
+            } catch (err) {
+                console.error(err);
+                alert("Failed to redeem code.");
+            }
         };
 
         window.handleResetChoice = (choice) => {
@@ -823,24 +938,31 @@
             localStorage.removeItem(activeMarkedKey);
             localStorage.removeItem(activeCdKey);
             
+            // Determine how many cards they CURRENTLY have (so they don't lose extra cards on a reset)
+            let numCards = currentCardsPerPlayer;
+            const existingBoards = JSON.parse(localStorage.getItem(activeStorageKey));
+            if (existingBoards && existingBoards.length > 0) {
+                numCards = existingBoards.length;
+            }
+
             // Re-assign random questions to squares to keep it fresh
             const qLen = Math.max(1, currentSessionQuestions.length);
             assignedQuestions = [];
-            for(let c=0; c<currentCardsPerPlayer; c++) {
+            for(let c=0; c<numCards; c++) {
                 assignedQuestions.push(Array.from({length: 25}, () => Math.floor(Math.random() * qLen)));
             }
             localStorage.setItem(activeQsKey, JSON.stringify(assignedQuestions));
 
             if (choice === 'new') {
                 localStorage.removeItem(activeStorageKey);
-                generateBingoBoards(currentCardsPerPlayer);
+                generateBingoBoards(numCards);
             } else {
                 // Keep the exact same numbers, but re-render to clear marks
                 const savedBoards = localStorage.getItem(activeStorageKey);
                 if (savedBoards) {
                     renderBoardsFromData(JSON.parse(savedBoards));
                 } else {
-                    generateBingoBoards(currentCardsPerPlayer);
+                    generateBingoBoards(numCards);
                 }
             }
         };
