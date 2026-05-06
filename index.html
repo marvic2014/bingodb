@@ -64,6 +64,32 @@
             <div id="active-sessions-list" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
         </div>
 
+        <!-- NEW: Manage Live Session View -->
+        <div id="view-manage-session" class="hidden">
+            <div class="flex items-center gap-4 mb-6">
+                <button onclick="backToDashboardFromSession()" class="text-indigo-600 font-bold hover:underline">← Back</button>
+                <h2 class="text-xl font-bold text-slate-800">Live Game: <span id="manage-session-code" class="text-indigo-600 tracking-widest font-mono"></span></h2>
+            </div>
+            
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-6 flex flex-wrap gap-4 items-center justify-between">
+                <div>
+                    <h3 class="font-bold text-gray-700">Game Controls</h3>
+                    <p class="text-sm text-gray-500">Draw numbers to call out to your students.</p>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="drawNumber()" class="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold shadow-md hover:bg-indigo-700">Draw Number</button>
+                    <button onclick="resetSession()" class="bg-orange-500 text-white px-4 py-2 rounded-lg font-bold shadow-md hover:bg-orange-600">Reset Game</button>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <h3 class="font-bold text-gray-700 mb-4">Drawn Numbers</h3>
+                <div id="teacher-drawn-list" class="flex flex-wrap gap-2">
+                    <!-- Numbers will go here -->
+                </div>
+            </div>
+        </div>
+
         <div id="view-collections">
             <div class="flex justify-between items-center mb-6">
                 <h2 class="text-xl font-bold text-slate-700">Your Collections</h2>
@@ -99,6 +125,14 @@
                 <button onclick="exitSession()" class="text-slate-400 text-sm hover:text-red-500 font-medium">Exit Game</button>
             </div>
             
+            <!-- NEW: Student's view of Drawn Numbers -->
+            <div class="bg-white p-4 rounded-xl shadow-lg border-2 border-indigo-50 mb-6">
+                <h3 class="text-sm font-bold text-slate-500 mb-2 uppercase tracking-wider">Teacher's Draws</h3>
+                <div id="student-drawn-list" class="flex flex-wrap gap-2 max-h-24 overflow-y-auto">
+                    <span class="text-slate-400 text-sm italic">Waiting for numbers...</span>
+                </div>
+            </div>
+
             <div class="bg-white p-4 rounded-xl shadow-lg border-4 border-indigo-100 mb-6">
                 <!-- Bingo Headers B I N G O -->
                 <div class="grid grid-cols-5 gap-1 mb-2">
@@ -194,9 +228,13 @@
         let sessionUnsubscribe = null;
         let authPromise = null;
 
+        // Teacher Live Session State
+        let activeLiveSessionCode = null;
+        let manageSessionUnsub = null;
+
         // Student Local State Context
         let currentSessionQuestions = [];
-        let markedCellsState = [];
+        let markedCellsState = {}; // Changed to Object for Timestamps
         let assignedQuestions = []; // Maps grid index [0-24] to a specific question index
         let cellCooldowns = {};     // Maps grid index [0-24] to an unlock timestamp
         let activeStorageKey, activeMarkedKey, activeQsKey, activeCdKey;
@@ -292,7 +330,10 @@
                                 <span class="text-xs font-bold text-indigo-400 uppercase tracking-wider">Live: ${s.id}</span>
                                 <h3 class="font-bold text-indigo-900">${s.title}</h3>
                             </div>
-                            <button onclick="destroySession('${s.id}')" class="bg-red-100 text-red-600 p-2 px-3 rounded-lg text-sm font-bold hover:bg-red-200">End Game</button>
+                            <div class="flex gap-2">
+                                <button onclick="manageLiveSession('${s.id}')" class="bg-indigo-600 text-white p-2 px-3 rounded-lg text-sm font-bold hover:bg-indigo-700">Manage</button>
+                                <button onclick="destroySession('${s.id}')" class="bg-red-100 text-red-600 p-2 px-3 rounded-lg text-sm font-bold hover:bg-red-200">End Game</button>
+                            </div>
                         </div>
                     `).join('');
                 } else {
@@ -379,10 +420,91 @@
                 collectionId: colId, 
                 title: colName, 
                 status: 'active',
-                questions: fullQuestions 
+                questions: fullQuestions,
+                drawnNumbers: [],
+                lastReset: Date.now()
             });
             document.getElementById('display-game-code').textContent = code;
             document.getElementById('code-modal').classList.replace('hidden', 'flex');
+        };
+
+        window.manageLiveSession = (code) => {
+            activeLiveSessionCode = code;
+            document.getElementById('view-collections').classList.add('hidden');
+            document.getElementById('active-sessions-area').classList.add('hidden');
+            document.getElementById('view-manage-session').classList.remove('hidden');
+            document.getElementById('manage-session-code').textContent = code;
+
+            if (manageSessionUnsub) manageSessionUnsub();
+            manageSessionUnsub = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'sessions', code), (snap) => {
+                if (!snap.exists()) {
+                    backToDashboardFromSession();
+                    return;
+                }
+                const data = snap.data();
+                const drawn = data.drawnNumbers || [];
+                const list = document.getElementById('teacher-drawn-list');
+                
+                if (drawn.length === 0) {
+                    list.innerHTML = '<span class="text-slate-400 italic">No numbers drawn yet.</span>';
+                } else {
+                    list.innerHTML = drawn.map(d => `
+                        <div class="bg-indigo-50 border border-indigo-200 p-2 rounded-lg text-center min-w-[4rem]">
+                            <div class="font-black text-indigo-700 text-lg">${d.letter}-${d.num}</div>
+                            <div class="text-[10px] text-slate-500">${d.time}</div>
+                        </div>
+                    `).reverse().join('');
+                }
+            });
+        };
+
+        window.backToDashboardFromSession = () => {
+            if (manageSessionUnsub) manageSessionUnsub();
+            activeLiveSessionCode = null;
+            document.getElementById('view-manage-session').classList.add('hidden');
+            document.getElementById('view-collections').classList.remove('hidden');
+            document.getElementById('active-sessions-area').classList.remove('hidden');
+        };
+
+        window.drawNumber = async () => {
+            if (!activeLiveSessionCode) return;
+            const ref = doc(db, 'artifacts', appId, 'public', 'data', 'sessions', activeLiveSessionCode);
+            const snap = await getDoc(ref);
+            if (!snap.exists()) return;
+            
+            const data = snap.data();
+            const drawn = data.drawnNumbers || [];
+            
+            if (drawn.length >= 75) {
+                alert("All 75 numbers have been drawn!");
+                return;
+            }
+
+            let num;
+            do {
+                num = Math.floor(Math.random() * 75) + 1;
+            } while (drawn.some(d => d.num === num));
+
+            let letter = '';
+            if (num <= 15) letter = 'B';
+            else if (num <= 30) letter = 'I';
+            else if (num <= 45) letter = 'N';
+            else if (num <= 60) letter = 'G';
+            else letter = 'O';
+
+            const timeStr = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+            drawn.push({ num, letter, time: timeStr });
+
+            await updateDoc(ref, { drawnNumbers: drawn });
+        };
+
+        window.resetSession = async () => {
+            if (!confirm("Are you sure? This will clear all student boards and redraws for this session.")) return;
+            const ref = doc(db, 'artifacts', appId, 'public', 'data', 'sessions', activeLiveSessionCode);
+            await updateDoc(ref, {
+                drawnNumbers: [],
+                lastReset: Date.now()
+            });
         };
 
         // --- CSV IMPORT LOGIC ---
@@ -457,7 +579,14 @@
                 currentSessionQuestions = data.questions || [];
 
                 // Persistence: Marked cells & Cooldowns
-                markedCellsState = JSON.parse(localStorage.getItem(activeMarkedKey)) || [];
+                markedCellsState = JSON.parse(localStorage.getItem(activeMarkedKey)) || {};
+                // Fallback for old array format
+                if (Array.isArray(markedCellsState)) {
+                    let newObj = {};
+                    markedCellsState.forEach(idx => newObj[idx] = "Marked");
+                    markedCellsState = newObj;
+                }
+                
                 cellCooldowns = JSON.parse(localStorage.getItem(activeCdKey)) || {};
 
                 // Persistence: Assigned Questions to specific cells
@@ -478,12 +607,48 @@
                     generateBingoBoard();
                 }
 
-                // Watch session for destruction
+                // Watch session for destruction and updates
                 if (sessionUnsubscribe) sessionUnsubscribe();
                 sessionUnsubscribe = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'sessions', code), (s) => {
                     if (!s.exists()) {
                         alert("The teacher has ended this session.");
                         exitSession();
+                        return;
+                    }
+                    
+                    const sessionData = s.data();
+                    
+                    // Handle Teacher Reset
+                    const localResetKey = `bingo_reset_${code}_${name}`;
+                    const localReset = localStorage.getItem(localResetKey);
+                    
+                    if (sessionData.lastReset && (!localReset || parseInt(localReset) < sessionData.lastReset)) {
+                        alert("The teacher has reset the game. Your board is being cleared.");
+                        localStorage.setItem(localResetKey, sessionData.lastReset);
+                        
+                        markedCellsState = {};
+                        cellCooldowns = {};
+                        assignedQuestions = [];
+                        
+                        localStorage.removeItem(activeMarkedKey);
+                        localStorage.removeItem(activeCdKey);
+                        localStorage.removeItem(activeQsKey);
+                        localStorage.removeItem(activeStorageKey);
+                        
+                        generateBingoBoard();
+                    }
+                    
+                    // Update Student Drawn Numbers UI
+                    const drawnList = document.getElementById('student-drawn-list');
+                    const drawn = sessionData.drawnNumbers || [];
+                    if (drawn.length === 0) {
+                        drawnList.innerHTML = '<span class="text-slate-400 text-sm italic">Waiting for numbers...</span>';
+                    } else {
+                        drawnList.innerHTML = drawn.map(d => `
+                            <div class="bg-indigo-600 text-white px-2 py-1 rounded text-xs font-bold shadow-sm">
+                                ${d.letter}-${d.num}
+                            </div>
+                        `).reverse().join('');
                     }
                 });
             } catch (err) {
@@ -514,11 +679,14 @@
                     cell.innerHTML = `<span class="text-sm">FREE</span>`;
                     cell.classList.add('marked', 'free', 'text-indigo-600');
                 } 
-                else if (markedCellsState.includes(i)) {
+                else if (markedCellsState[i]) {
                     cell.classList.add('marked');
                     // Ensure marked cells don't look clickable
                     cell.classList.remove('hover:bg-slate-50', 'cursor-pointer');
                     cell.classList.add('cursor-default');
+                    // Append the timestamp
+                    const timeStr = markedCellsState[i];
+                    cell.innerHTML += `<div class="text-[9px] text-indigo-200 mt-1 font-normal">${timeStr}</div>`;
                 } 
                 else if (cellCooldowns[i] && cellCooldowns[i] > Date.now()) {
                     // Lock cell visually for cooldown
@@ -533,7 +701,7 @@
                     if (item === "FREE" || i === 12) return; 
                     
                     // Disallow click if already correctly answered (marked)
-                    if (markedCellsState.includes(i)) return;
+                    if (markedCellsState[i]) return;
                     
                     // Disallow click if on cooldown
                     if (cellCooldowns[i] && cellCooldowns[i] > Date.now()) return;
@@ -569,8 +737,9 @@
                 btn.onclick = () => {
                     if (letter === q.correct) {
                         cell.classList.add('marked');
-                        if (!markedCellsState.includes(index)) {
-                            markedCellsState.push(index);
+                        if (!markedCellsState[index]) {
+                            const timeStr = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+                            markedCellsState[index] = timeStr;
                             localStorage.setItem(activeMarkedKey, JSON.stringify(markedCellsState));
                         }
                         
